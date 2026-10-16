@@ -1,5 +1,6 @@
 import unittest
 from dataclasses import replace
+from pathlib import Path
 
 from packetizer import (
     AggregateQuota,
@@ -10,10 +11,21 @@ from packetizer import (
     PacketBuildSpec,
     validate_distribution,
 )
-from packetizer.templates import (
-    acf_winter_final_template,
-    acf_winter_submitted_template,
-)
+from packetizer import load_template
+
+TEMPLATES = Path(__file__).resolve().parents[1] / "templates"
+
+
+def acf_winter_final_template():
+    return load_template(TEMPLATES / "acf-winter-final.json")
+
+
+def acf_winter_submitted_template():
+    return load_template(TEMPLATES / "acf-winter-submitted.json")
+
+
+def acf_fall_final_template():
+    return load_template(TEMPLATES / "acf-fall-final.json")
 
 
 class PacketBuildSpecTests(unittest.TestCase):
@@ -111,6 +123,26 @@ class PacketBuildSpecTests(unittest.TestCase):
                 pattern.index(1) // 2 != pattern.index(1, pattern.index(1) + 1) // 2
                 for pattern in final_other.patterns
             )
+        )
+
+    def test_acf_fall_final_template_allows_only_three_flexible_questions_each(self) -> None:
+        template = acf_fall_final_template()
+        self.assertEqual((template.tossup_capacity, template.bonus_capacity), (20, 20))
+        rule = template.allowed_patterns[0]
+        self.assertEqual(len(rule.patterns), 48)
+        self.assertTrue(
+            all(
+                sum(pattern[0::2]) == 3 and sum(pattern[1::2]) == 3
+                for pattern in rule.patterns
+            )
+        )
+        self.assertEqual(
+            validate_distribution(
+                template.create_spec(packet_count=1),
+                (_first_valid_counts(template),),
+                {"tossup": 0, "bonus": 0},
+            ),
+            (),
         )
 
     def test_template_rules_are_independently_editable(self) -> None:

@@ -76,16 +76,13 @@ than defaulted.
 `PacketBuildSpec` describes exact tossup/bonus capacities, per-packet
 category/subcategory bounds, allowed count-pattern combinations, set-wide
 aggregate bounds, and permitted leftover bounds. `validate_distribution`
-checks proposed counts without depending on a solver. The
-`acf_winter_submitted_template()` and `acf_winter_final_template()` presets
-provide the Winter distributions for submitted 24/24 and final/edited 20/20
-packets. `blank_build_template()` starts with capacities and no category rules.
-Presets are immutable values; create an edited copy when changing their rules
-or capacities.
+checks proposed counts without depending on a solver.
 
-Templates can be stored as JSON with `save_template(template, path)` and read
-back with `load_template(path)` (or `template_to_dict` / `template_from_dict`
-for in-memory use). Editable copies of the ACF Winter presets are in
+Distributions are defined as JSON templates and loaded into a `BuildTemplate`
+with `load_template(path)` (or `template_from_dict` for in-memory use);
+`save_template` / `template_to_dict` write them back. `BuildTemplate` is an
+immutable value; use `dataclasses.replace` to make an edited copy. Ready-made
+ACF templates (Winter submitted and final, Fall final) are in
 [`templates/`](./templates). Each file lists quotas as selector objects with
 minimum/maximum counts; allowed patterns list each permitted combination as
 `"type:category:subcategory": count` entries, with zero counts omitted. Loading

@@ -27,12 +27,7 @@ from .template_json import (
     template_from_dict,
     template_to_dict,
 )
-from .templates import (
-    BuildTemplate,
-    acf_winter_final_template,
-    acf_winter_submitted_template,
-    blank_build_template,
-)
+from .templates import BuildTemplate
 
 __all__ = [
     "Bonus",
@@ -54,9 +49,6 @@ __all__ = [
     "Topic",
     "load_question_pool_csv",
     "load_question_set",
-    "acf_winter_final_template",
-    "acf_winter_submitted_template",
-    "blank_build_template",
     "validate_distribution",
     "load_template",
     "save_template",
