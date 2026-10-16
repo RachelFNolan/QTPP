@@ -84,7 +84,7 @@ class QuestionSetMetadata:
     id: str
     name: str
     year: int
-    standard: bool
+    standard: bool | None
     difficulty: Difficulty | None = None
 
 

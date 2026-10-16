@@ -9,7 +9,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from packetizer import load_question_set
+from packetizer import Difficulty, load_question_set
 
 
 COLUMNS = [
@@ -19,6 +19,8 @@ COLUMNS = [
     "set_id",
     "set_name",
     "set_year",
+    "set_standard",
+    "set_difficulty",
     "packet_id",
     "packet_name",
     "packet_number",
@@ -70,6 +72,8 @@ def generate_question_pool(source_dir: Path, output_path: Path) -> None:
                     "set_id": metadata.id,
                     "set_name": metadata.name,
                     "set_year": metadata.year,
+                    "set_standard": _json_value(metadata.standard),
+                    "set_difficulty": _json_value(_difficulty_value(metadata.difficulty)),
                     "packet_id": packet.id,
                     "packet_name": packet.name,
                     "packet_number": packet.number,
@@ -112,6 +116,8 @@ def generate_question_pool(source_dir: Path, output_path: Path) -> None:
                     "set_id": metadata.id,
                     "set_name": metadata.name,
                     "set_year": metadata.year,
+                    "set_standard": _json_value(metadata.standard),
+                    "set_difficulty": _json_value(_difficulty_value(metadata.difficulty)),
                     "packet_id": packet.id,
                     "packet_name": packet.name,
                     "packet_number": packet.number,
@@ -165,6 +171,12 @@ def _json_value(value: object) -> str:
     if value is None:
         return ""
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def _difficulty_value(value: Difficulty | None) -> dict[str, object] | None:
+    if value is None:
+        return None
+    return {"level": value.level, "sublevel": value.sublevel}
 
 
 def main() -> None:

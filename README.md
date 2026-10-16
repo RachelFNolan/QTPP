@@ -53,6 +53,36 @@ consume one type, but require coordinating schemas and updates. Filtering the
 combined file on `question_type` can produce those type-specific views when
 needed.
 
+The CSV can be loaded as an unpacketized pool:
+
+```python
+from packetizer import load_question_pool_csv
+
+question_pool = load_question_pool_csv(
+    "Test Questions/2025 ACF Winter/Question Pool.csv"
+)
+print(len(question_pool.tossups), len(question_pool.bonuses))
+```
+
+The importer accepts the UTF-8-BOM format, permits additional columns, and
+reports malformed rows with their CSV row context. It preserves question IDs,
+raw and sanitized text, topics, question difficulty, and bonus part data.
+Generated pools also include `set_standard` and `set_difficulty`; legacy files
+without those fields import with missing set metadata marked unknown rather
+than defaulted.
+
+## Packet build rules
+
+`PacketBuildSpec` describes exact tossup/bonus capacities, per-packet
+category/subcategory bounds, allowed count-pattern combinations, set-wide
+aggregate bounds, and permitted leftover bounds. `validate_distribution`
+checks proposed counts without depending on a solver. The
+`acf_winter_submitted_template()` and `acf_winter_final_template()` presets
+provide the Winter distributions for submitted 24/24 and final/edited 20/20
+packets. `blank_build_template()` starts with capacities and no category rules.
+Presets are immutable values; create an edited copy when changing their rules
+or capacities.
+
 ## Tests
 
 ```sh
