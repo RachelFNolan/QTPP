@@ -83,6 +83,15 @@ packets. `blank_build_template()` starts with capacities and no category rules.
 Presets are immutable values; create an edited copy when changing their rules
 or capacities.
 
+Templates can be stored as JSON with `save_template(template, path)` and read
+back with `load_template(path)` (or `template_to_dict` / `template_from_dict`
+for in-memory use). Editable copies of the ACF Winter presets are in
+[`templates/`](./templates). Each file lists quotas as selector objects with
+minimum/maximum counts; allowed patterns list each permitted combination as
+`"type:category:subcategory": count` entries, with zero counts omitted. Loading
+validates the schema version and rule structure and reports errors with the
+file path.
+
 ## Tests
 
 ```sh

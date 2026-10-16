@@ -1,0 +1,459 @@
+{
+  "schema_version": 1,
+  "name": "ACF Winter — Final/Edited Packet",
+  "tossup_capacity": 20,
+  "bonus_capacity": 20,
+  "quotas": [
+    {
+      "selector": {
+        "question_type": "tossup",
+        "category": "Literature",
+        "subcategory": "American Literature"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "bonus",
+        "category": "Literature",
+        "subcategory": "American Literature"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "tossup",
+        "category": "Literature",
+        "subcategory": "British Literature"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "bonus",
+        "category": "Literature",
+        "subcategory": "British Literature"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "tossup",
+        "category": "Literature",
+        "subcategory": "European Literature"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "bonus",
+        "category": "Literature",
+        "subcategory": "European Literature"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "tossup",
+        "category": "Literature",
+        "subcategory": "World Literature"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "bonus",
+        "category": "Literature",
+        "subcategory": "World Literature"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "tossup",
+        "category": "History",
+        "subcategory": "American History"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "bonus",
+        "category": "History",
+        "subcategory": "American History"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "tossup",
+        "category": "History",
+        "subcategory": "European History"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "bonus",
+        "category": "History",
+        "subcategory": "European History"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "tossup",
+        "category": "History",
+        "subcategory": "World History"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "bonus",
+        "category": "History",
+        "subcategory": "World History"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "tossup",
+        "category": "History",
+        "subcategory": "Other History"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "bonus",
+        "category": "History",
+        "subcategory": "Other History"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "tossup",
+        "category": "Science",
+        "subcategory": "Biology"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "bonus",
+        "category": "Science",
+        "subcategory": "Biology"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "tossup",
+        "category": "Science",
+        "subcategory": "Chemistry"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "bonus",
+        "category": "Science",
+        "subcategory": "Chemistry"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "tossup",
+        "category": "Science",
+        "subcategory": "Physics"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "bonus",
+        "category": "Science",
+        "subcategory": "Physics"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "tossup",
+        "category": "Science",
+        "subcategory": "Other Science"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "bonus",
+        "category": "Science",
+        "subcategory": "Other Science"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "tossup",
+        "category": "Fine Arts",
+        "subcategory": "Visual Fine Arts"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "bonus",
+        "category": "Fine Arts",
+        "subcategory": "Visual Fine Arts"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "tossup",
+        "category": "Fine Arts",
+        "subcategory": "Auditory Fine Arts"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "bonus",
+        "category": "Fine Arts",
+        "subcategory": "Auditory Fine Arts"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "tossup",
+        "category": "Fine Arts",
+        "subcategory": "Other Fine Arts"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "bonus",
+        "category": "Fine Arts",
+        "subcategory": "Other Fine Arts"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "tossup",
+        "category": "Religion",
+        "subcategory": "Religion"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "bonus",
+        "category": "Religion",
+        "subcategory": "Religion"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "tossup",
+        "category": "Mythology",
+        "subcategory": "Mythology"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "bonus",
+        "category": "Mythology",
+        "subcategory": "Mythology"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "tossup",
+        "category": "Social Science",
+        "subcategory": "Social Science"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "bonus",
+        "category": "Social Science",
+        "subcategory": "Social Science"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "tossup",
+        "category": "Philosophy",
+        "subcategory": "Philosophy"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "bonus",
+        "category": "Philosophy",
+        "subcategory": "Philosophy"
+      },
+      "minimum": 1,
+      "maximum": 1
+    }
+  ],
+  "allowed_patterns": [
+    {
+      "name": "Final Other: one tossup and one bonus from distinct subcategories",
+      "selectors": [
+        {
+          "question_type": "tossup",
+          "category": "Geography",
+          "subcategory": "Geography"
+        },
+        {
+          "question_type": "bonus",
+          "category": "Geography",
+          "subcategory": "Geography"
+        },
+        {
+          "question_type": "tossup",
+          "category": "Current Events",
+          "subcategory": "Current Events"
+        },
+        {
+          "question_type": "bonus",
+          "category": "Current Events",
+          "subcategory": "Current Events"
+        },
+        {
+          "question_type": "tossup",
+          "category": "Pop Culture",
+          "subcategory": "Pop Culture"
+        },
+        {
+          "question_type": "bonus",
+          "category": "Pop Culture",
+          "subcategory": "Pop Culture"
+        },
+        {
+          "question_type": "tossup",
+          "category": "Other Academic",
+          "subcategory": "Other Academic"
+        },
+        {
+          "question_type": "bonus",
+          "category": "Other Academic",
+          "subcategory": "Other Academic"
+        }
+      ],
+      "patterns": [
+        {
+          "tossup:Geography:Geography": 1,
+          "bonus:Current Events:Current Events": 1
+        },
+        {
+          "bonus:Geography:Geography": 1,
+          "tossup:Current Events:Current Events": 1
+        },
+        {
+          "tossup:Geography:Geography": 1,
+          "bonus:Pop Culture:Pop Culture": 1
+        },
+        {
+          "bonus:Geography:Geography": 1,
+          "tossup:Pop Culture:Pop Culture": 1
+        },
+        {
+          "tossup:Geography:Geography": 1,
+          "bonus:Other Academic:Other Academic": 1
+        },
+        {
+          "bonus:Geography:Geography": 1,
+          "tossup:Other Academic:Other Academic": 1
+        },
+        {
+          "tossup:Current Events:Current Events": 1,
+          "bonus:Pop Culture:Pop Culture": 1
+        },
+        {
+          "bonus:Current Events:Current Events": 1,
+          "tossup:Pop Culture:Pop Culture": 1
+        },
+        {
+          "tossup:Current Events:Current Events": 1,
+          "bonus:Other Academic:Other Academic": 1
+        },
+        {
+          "bonus:Current Events:Current Events": 1,
+          "tossup:Other Academic:Other Academic": 1
+        },
+        {
+          "tossup:Pop Culture:Pop Culture": 1,
+          "bonus:Other Academic:Other Academic": 1
+        },
+        {
+          "bonus:Pop Culture:Pop Culture": 1,
+          "tossup:Other Academic:Other Academic": 1
+        }
+      ]
+    }
+  ],
+  "leftover_bounds": [
+    {
+      "question_type": "tossup",
+      "minimum": 0,
+      "maximum": null
+    },
+    {
+      "question_type": "bonus",
+      "minimum": 0,
+      "maximum": null
+    }
+  ]
+}
