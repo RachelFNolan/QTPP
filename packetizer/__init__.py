@@ -1,6 +1,7 @@
 from .build_spec import (
     AggregateQuota,
     AllowedCountPatterns,
+    CategoryCountRule,
     CategoryQuota,
     CountSelector,
     LeftoverBound,
@@ -35,6 +36,7 @@ __all__ = [
     "BuildTemplate",
     "AggregateQuota",
     "AllowedCountPatterns",
+    "CategoryCountRule",
     "CategoryQuota",
     "CountSelector",
     "Difficulty",

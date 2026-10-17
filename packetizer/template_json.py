@@ -6,6 +6,7 @@ from typing import Any
 
 from .build_spec import (
     AllowedCountPatterns,
+    CategoryCountRule,
     CategoryQuota,
     CountSelector,
     LeftoverBound,
@@ -34,18 +35,7 @@ def template_to_dict(template: BuildTemplate) -> dict[str, Any]:
             for quota in template.quotas
         ],
         "allowed_patterns": [
-            {
-                "name": rule.name,
-                "selectors": [_selector_to_dict(selector) for selector in rule.selectors],
-                "patterns": [
-                    {
-                        _selector_label(selector): count
-                        for selector, count in zip(rule.selectors, pattern)
-                        if count
-                    }
-                    for pattern in rule.patterns
-                ],
-            }
+            _rule_to_dict(rule)
             for rule in template.allowed_patterns
         ],
         "leftover_bounds": [
@@ -75,7 +65,10 @@ def template_from_dict(data: dict[str, Any]) -> BuildTemplate:
             )
             for item in data.get("quotas", [])
         )
-        patterns = tuple(_pattern_rule_from_dict(item) for item in data.get("allowed_patterns", []))
+        patterns = tuple(
+            _pattern_rule_from_dict(item)
+            for item in data.get("allowed_patterns", [])
+        )
         leftovers = tuple(
             LeftoverBound(
                 question_type=item["question_type"],
@@ -139,7 +132,52 @@ def _selector_label(selector: CountSelector) -> str:
     return ":".join(parts)
 
 
-def _pattern_rule_from_dict(data: dict[str, Any]) -> AllowedCountPatterns:
+def _rule_to_dict(
+    rule: AllowedCountPatterns | CategoryCountRule,
+) -> dict[str, Any]:
+    if isinstance(rule, CategoryCountRule):
+        return {
+            "name": rule.name,
+            "categories": list(rule.categories),
+            "counts": {
+                "tossup": rule.tossup_count,
+                "bonus": rule.bonus_count,
+            },
+            "distinct_categories": rule.distinct_categories,
+        }
+    return {
+        "name": rule.name,
+        "selectors": [_selector_to_dict(selector) for selector in rule.selectors],
+        "patterns": [
+            {
+                _selector_label(selector): count
+                for selector, count in zip(rule.selectors, pattern)
+                if count
+            }
+            for pattern in rule.patterns
+        ],
+    }
+
+
+def _pattern_rule_from_dict(
+    data: dict[str, Any],
+) -> AllowedCountPatterns | CategoryCountRule:
+    if "categories" in data or "counts" in data:
+        counts = data["counts"]
+        categories = data["categories"]
+        if not isinstance(categories, list) or any(
+            not isinstance(category, str) for category in categories
+        ):
+            raise ValueError(f"{data.get('name', 'category count rule')}: categories must be an array of strings")
+        if not isinstance(counts, dict):
+            raise ValueError(f"{data.get('name', 'category count rule')}: counts must be an object")
+        return CategoryCountRule(
+            name=data["name"],
+            categories=tuple(categories),
+            tossup_count=counts["tossup"],
+            bonus_count=counts["bonus"],
+            distinct_categories=data.get("distinct_categories", False),
+        )
     selectors = tuple(_selector_from_dict(item) for item in data["selectors"])
     labels = {_selector_label(selector): index for index, selector in enumerate(selectors)}
     patterns = []

@@ -84,10 +84,16 @@ with `load_template(path)` (or `template_from_dict` for in-memory use);
 immutable value; use `dataclasses.replace` to make an edited copy. Ready-made
 ACF templates (Winter submitted and final, Fall final) are in
 [`templates/`](./templates). Each file lists quotas as selector objects with
-minimum/maximum counts; allowed patterns list each permitted combination as
-`"type:category:subcategory": count` entries, with zero counts omitted. Loading
-validates the schema version and rule structure and reports errors with the
-file path.
+minimum/maximum counts. Allowed patterns can enumerate permitted combinations
+using `"type:category:subcategory": count` entries, or use a compact category
+count rule with a list of categories, exact tossup/bonus counts, and an optional
+`distinct_categories` requirement. For example, a rule with categories
+`["Geography", "Current Events"]`, counts `{"tossup": 1, "bonus": 1}`, and
+`distinct_categories: true` requires one tossup and one bonus from those
+categories, with the two questions coming from different categories. The
+category names match the broad question category and include all subcategories.
+Loading validates the schema version and rule structure and reports errors
+with the file path.
 
 ## Tests
 

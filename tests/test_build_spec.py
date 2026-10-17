@@ -5,6 +5,7 @@ from pathlib import Path
 from packetizer import (
     AggregateQuota,
     AllowedCountPatterns,
+    CategoryCountRule,
     CategoryQuota,
     CountSelector,
     LeftoverBound,
@@ -82,6 +83,13 @@ class PacketBuildSpecTests(unittest.TestCase):
                 selectors=(CountSelector("bonus", "History"),),
                 patterns=((1, 0),),
             )
+        with self.assertRaisesRegex(ValueError, "categories must be unique"):
+            CategoryCountRule(
+                name="invalid",
+                categories=("History", "History"),
+                tossup_count=1,
+                bonus_count=1,
+            )
 
     def test_acf_winter_templates_have_published_capacities_and_patterns(self) -> None:
         submitted = acf_winter_submitted_template()
@@ -110,20 +118,13 @@ class PacketBuildSpecTests(unittest.TestCase):
         )
 
         final_other = final.allowed_patterns[0]
-        self.assertEqual(len(final_other.patterns), 12)
-        self.assertTrue(
-            all(
-                sum(pattern[index] for index in range(0, len(pattern), 2)) == 1
-                and sum(pattern[index] for index in range(1, len(pattern), 2)) == 1
-                for pattern in final_other.patterns
-            )
+        self.assertIsInstance(final_other, CategoryCountRule)
+        self.assertEqual(
+            final_other.categories,
+            ("Geography", "Current Events", "Pop Culture", "Other Academic"),
         )
-        self.assertTrue(
-            all(
-                pattern.index(1) // 2 != pattern.index(1, pattern.index(1) + 1) // 2
-                for pattern in final_other.patterns
-            )
-        )
+        self.assertEqual((final_other.tossup_count, final_other.bonus_count), (1, 1))
+        self.assertTrue(final_other.distinct_categories)
 
     def test_acf_fall_final_template_allows_only_three_flexible_questions_each(self) -> None:
         template = acf_fall_final_template()
@@ -152,21 +153,40 @@ class PacketBuildSpecTests(unittest.TestCase):
         self.assertEqual(edited.create_spec(packet_count=3).packet_count, 3)
         self.assertEqual(edited.create_spec(packet_count=3).tossup_capacity, 19)
 
-    def test_final_other_rule_rejects_same_subcategory_tossup_and_bonus(self) -> None:
+    def test_final_other_rule_rejects_two_questions_from_same_category(self) -> None:
         template = acf_winter_final_template()
         spec = template.create_spec(packet_count=1)
         counts = _first_valid_counts(template)
         rule = template.allowed_patterns[0]
-        for selector in rule.selectors:
-            counts.pop(selector, None)
-        counts[CountSelector("tossup", "Geography", "Geography")] = 1
-        counts[CountSelector("bonus", "Geography", "Geography")] = 1
+        for selector in tuple(counts):
+            if selector.category in rule.categories:
+                del counts[selector]
+        counts[CountSelector("tossup", "Geography", "Physical Geography")] = 1
+        counts[CountSelector("bonus", "Geography", "Human Geography")] = 1
         errors = validate_distribution(
             spec,
             (counts,),
             leftovers={"tossup": 0, "bonus": 0},
         )
-        self.assertTrue(any("distinct subcategories" in error for error in errors))
+        self.assertTrue(any("distinct categories" in error for error in errors))
+
+    def test_final_other_rule_accepts_different_categories(self) -> None:
+        template = acf_winter_final_template()
+        counts = _first_valid_counts(template)
+        rule = template.allowed_patterns[0]
+        for selector in tuple(counts):
+            if selector.category in rule.categories:
+                del counts[selector]
+        counts[CountSelector("tossup", "Geography", "Physical Geography")] = 1
+        counts[CountSelector("bonus", "Current Events", "International")] = 1
+        self.assertEqual(
+            validate_distribution(
+                template.create_spec(packet_count=1),
+                (counts,),
+                leftovers={"tossup": 0, "bonus": 0},
+            ),
+            (),
+        )
 
 
 def _first_valid_counts(template):
@@ -175,7 +195,18 @@ def _first_valid_counts(template):
         for quota in template.quotas
     }
     for rule in template.allowed_patterns:
-        counts.update(zip(rule.selectors, rule.patterns[0]))
+        if isinstance(rule, AllowedCountPatterns):
+            counts.update(zip(rule.selectors, rule.patterns[0]))
+        else:
+            counts[CountSelector("tossup", rule.categories[0], rule.categories[0])] = (
+                rule.tossup_count
+            )
+            bonus_category = rule.categories[-1]
+            if rule.distinct_categories and rule.tossup_count:
+                bonus_category = rule.categories[1 % len(rule.categories)]
+            counts[CountSelector("bonus", bonus_category, bonus_category)] = (
+                rule.bonus_count
+            )
     return counts
 
 

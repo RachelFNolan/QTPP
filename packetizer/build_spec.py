@@ -76,6 +76,36 @@ class AllowedCountPatterns:
 
 
 @dataclass(frozen=True, slots=True)
+class CategoryCountRule:
+    """Require exact question-type counts across categories, optionally distinct."""
+
+    name: str
+    categories: tuple[str, ...]
+    tossup_count: int
+    bonus_count: int
+    distinct_categories: bool = False
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.name, str) or not self.name:
+            raise ValueError("category count rule name must be a non-empty string")
+        if not self.categories or any(
+            not isinstance(category, str) or not category
+            for category in self.categories
+        ):
+            raise ValueError("category count rules require non-empty categories")
+        if len(set(self.categories)) != len(self.categories):
+            raise ValueError("category count rule categories must be unique")
+        if not _nonnegative_int(self.tossup_count) or not _nonnegative_int(
+            self.bonus_count
+        ):
+            raise ValueError("category count rule counts must be non-negative integers")
+        if self.tossup_count + self.bonus_count == 0:
+            raise ValueError("category count rules must require at least one question")
+        if not isinstance(self.distinct_categories, bool):
+            raise ValueError("distinct_categories must be a boolean")
+
+
+@dataclass(frozen=True, slots=True)
 class LeftoverBound:
     question_type: QuestionType
     minimum: int = 0
@@ -93,7 +123,7 @@ class PacketBuildSpec:
     tossup_capacity: int
     bonus_capacity: int
     quotas: tuple[CategoryQuota, ...] = ()
-    allowed_patterns: tuple[AllowedCountPatterns, ...] = ()
+    allowed_patterns: tuple[AllowedCountPatterns | CategoryCountRule, ...] = ()
     aggregate_quotas: tuple[AggregateQuota, ...] = ()
     leftover_bounds: tuple[LeftoverBound, ...] = field(
         default_factory=lambda: (
@@ -165,11 +195,51 @@ def validate_distribution(
                 )
 
         for rule in spec.allowed_patterns:
-            actual = tuple(_count_selector(counts, selector) for selector in rule.selectors)
-            if actual not in rule.patterns:
-                errors.append(
-                    f"packet {packet_index}: {rule.name} counts {actual} are not an allowed pattern"
+            if isinstance(rule, AllowedCountPatterns):
+                actual = tuple(
+                    _count_selector(counts, selector) for selector in rule.selectors
                 )
+                if actual not in rule.patterns:
+                    errors.append(
+                        f"packet {packet_index}: {rule.name} counts {actual} are not an allowed pattern"
+                    )
+            else:
+                category_counts = {
+                    category: {
+                        question_type: sum(
+                            count
+                            for selector, count in counts.items()
+                            if selector.category == category
+                            and selector.question_type == question_type
+                        )
+                        for question_type in QUESTION_TYPES
+                    }
+                    for category in rule.categories
+                }
+                tossup_total = sum(
+                    values["tossup"] for values in category_counts.values()
+                )
+                bonus_total = sum(
+                    values["bonus"] for values in category_counts.values()
+                )
+                is_distinct = not rule.distinct_categories or all(
+                    values["tossup"] + values["bonus"] <= 1
+                    for values in category_counts.values()
+                )
+                if (
+                    tossup_total != rule.tossup_count
+                    or bonus_total != rule.bonus_count
+                    or not is_distinct
+                ):
+                    errors.append(
+                        f"packet {packet_index}: {rule.name} requires "
+                        f"{rule.tossup_count} tossups and {rule.bonus_count} bonuses"
+                        + (
+                            " from distinct categories"
+                            if rule.distinct_categories
+                            else ""
+                        )
+                    )
 
     for quota in spec.aggregate_quotas:
         total = sum(_count_selector(counts, quota.selector) for counts in packets)
@@ -233,4 +303,3 @@ def _within_bounds(value: int, minimum: int, maximum: int | None) -> bool:
 
 def _bounds_text(minimum: int, maximum: int | None) -> str:
     return f"{minimum}..{maximum if maximum is not None else 'unbounded'}"
-

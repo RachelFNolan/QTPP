@@ -4,7 +4,10 @@ import unittest
 from pathlib import Path
 
 from packetizer import (
+    AllowedCountPatterns,
     BuildTemplate,
+    CategoryCountRule,
+    CountSelector,
     load_template,
     save_template,
     template_from_dict,
@@ -26,14 +29,45 @@ class TemplateJsonTests(unittest.TestCase):
                 save_template(template, path)
                 self.assertEqual(load_template(path), template)
 
-    def test_json_is_readable_with_labeled_nonzero_pattern_counts(self) -> None:
+    def test_json_serializes_compact_category_count_rule(self) -> None:
         data = template_to_dict(load_template(WINTER_FINAL))
         other = data["allowed_patterns"][0]
-        self.assertEqual(len(other["patterns"]), 12)
-        first = other["patterns"][0]
-        self.assertEqual(sum(first.values()), 2)
-        self.assertTrue(all(label.count(":") == 2 for label in first))
+        self.assertEqual(
+            other["categories"],
+            ["Geography", "Current Events", "Pop Culture", "Other Academic"],
+        )
+        self.assertEqual(other["counts"], {"tossup": 1, "bonus": 1})
+        self.assertTrue(other["distinct_categories"])
         json.dumps(data)
+
+    def test_reads_legacy_explicit_pattern_rules(self) -> None:
+        data = {
+            "schema_version": 1,
+            "name": "Explicit patterns",
+            "tossup_capacity": 1,
+            "bonus_capacity": 1,
+            "quotas": [],
+            "allowed_patterns": [{
+                "name": "Pair",
+                "selectors": [
+                    {"question_type": "tossup", "category": "History", "subcategory": "World"},
+                    {"question_type": "bonus", "category": "Science", "subcategory": "Biology"},
+                ],
+                "patterns": [{"tossup:History:World": 1, "bonus:Science:Biology": 1}],
+            }],
+        }
+        template = template_from_dict(data)
+        self.assertEqual(
+            template.allowed_patterns[0],
+            AllowedCountPatterns(
+                "Pair",
+                (
+                    CountSelector("tossup", "History", "World"),
+                    CountSelector("bonus", "Science", "Biology"),
+                ),
+                ((1, 1),),
+            ),
+        )
 
     def test_rejects_invalid_templates(self) -> None:
         data = template_to_dict(load_template(WINTER_FINAL))
@@ -42,7 +76,13 @@ class TemplateJsonTests(unittest.TestCase):
         missing = {key: value for key, value in data.items() if key != "name"}
         with self.assertRaisesRegex(ValueError, "missing required field 'name'"):
             template_from_dict(missing)
-        data["allowed_patterns"][0]["patterns"][0] = {"tossup:Nope:Nope": 1}
+        data["allowed_patterns"] = [{
+            "name": "Invalid",
+            "selectors": [
+                {"question_type": "tossup", "category": "History", "subcategory": "World"}
+            ],
+            "patterns": [{"tossup:Nope:Nope": 1}],
+        }]
         with self.assertRaisesRegex(ValueError, "unknown selector"):
             template_from_dict(data)
 

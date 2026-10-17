@@ -349,99 +349,18 @@
   ],
   "allowed_patterns": [
     {
-      "name": "Final Other: one tossup and one bonus from distinct subcategories",
-      "selectors": [
-        {
-          "question_type": "tossup",
-          "category": "Geography",
-          "subcategory": "Geography"
-        },
-        {
-          "question_type": "bonus",
-          "category": "Geography",
-          "subcategory": "Geography"
-        },
-        {
-          "question_type": "tossup",
-          "category": "Current Events",
-          "subcategory": "Current Events"
-        },
-        {
-          "question_type": "bonus",
-          "category": "Current Events",
-          "subcategory": "Current Events"
-        },
-        {
-          "question_type": "tossup",
-          "category": "Pop Culture",
-          "subcategory": "Pop Culture"
-        },
-        {
-          "question_type": "bonus",
-          "category": "Pop Culture",
-          "subcategory": "Pop Culture"
-        },
-        {
-          "question_type": "tossup",
-          "category": "Other Academic",
-          "subcategory": "Other Academic"
-        },
-        {
-          "question_type": "bonus",
-          "category": "Other Academic",
-          "subcategory": "Other Academic"
-        }
+      "name": "Final Other: one tossup and one bonus from distinct categories",
+      "categories": [
+        "Geography",
+        "Current Events",
+        "Pop Culture",
+        "Other Academic"
       ],
-      "patterns": [
-        {
-          "tossup:Geography:Geography": 1,
-          "bonus:Current Events:Current Events": 1
-        },
-        {
-          "bonus:Geography:Geography": 1,
-          "tossup:Current Events:Current Events": 1
-        },
-        {
-          "tossup:Geography:Geography": 1,
-          "bonus:Pop Culture:Pop Culture": 1
-        },
-        {
-          "bonus:Geography:Geography": 1,
-          "tossup:Pop Culture:Pop Culture": 1
-        },
-        {
-          "tossup:Geography:Geography": 1,
-          "bonus:Other Academic:Other Academic": 1
-        },
-        {
-          "bonus:Geography:Geography": 1,
-          "tossup:Other Academic:Other Academic": 1
-        },
-        {
-          "tossup:Current Events:Current Events": 1,
-          "bonus:Pop Culture:Pop Culture": 1
-        },
-        {
-          "bonus:Current Events:Current Events": 1,
-          "tossup:Pop Culture:Pop Culture": 1
-        },
-        {
-          "tossup:Current Events:Current Events": 1,
-          "bonus:Other Academic:Other Academic": 1
-        },
-        {
-          "bonus:Current Events:Current Events": 1,
-          "tossup:Other Academic:Other Academic": 1
-        },
-        {
-          "tossup:Pop Culture:Pop Culture": 1,
-          "bonus:Other Academic:Other Academic": 1
-        },
-        {
-          "bonus:Pop Culture:Pop Culture": 1,
-          "tossup:Other Academic:Other Academic": 1
-        }
-      ]
+      "counts": {
+        "tossup": 1,
+        "bonus": 1
+      },
+      "distinct_categories": true
     }
   ],
   "leftover_bounds": [
