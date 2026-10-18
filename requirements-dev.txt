@@ -1,0 +1,4 @@
+# Optional packages used for similarity evaluation and solver benchmarking.
+# The core packetizer package uses only the standard library.
+ortools>=9.10
+scikit-learn>=1.4

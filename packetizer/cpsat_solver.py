@@ -1,0 +1,176 @@
+from __future__ import annotations
+
+import random
+import time
+from itertools import combinations
+
+from .build_spec import (
+    AllowedCountPatterns,
+    LeftoverBound,
+    PacketBuildSpec,
+)
+from .feasibility import check_pool_feasibility
+from .model import QuestionSet
+from .scoring import CachedScorer, PacketLayout, SoftWeights
+from .similarity import PairScorer
+from .solving import (
+    InfeasibleError,
+    PoolIndex,
+    SolverResult,
+    finish_result,
+    optimize_order,
+)
+
+try:
+    from ortools.sat.python import cp_model
+except ImportError:  # pragma: no cover - exercised only without ortools
+    cp_model = None
+
+PENALTY_SCALE = 100
+
+
+def solve_cpsat(
+    pool: QuestionSet,
+    spec: PacketBuildSpec,
+    scorer: PairScorer,
+    weights: SoftWeights = SoftWeights(),
+    *,
+    seed: int = 0,
+    time_limit: float = 30.0,
+    top_pairs: int = 1500,
+    workers: int = 1,
+) -> SolverResult:
+    """OR-Tools CP-SAT solver.
+
+    Hard rules are exact constraints. The objective penalizes the most similar
+    pairs placed in the same packet; ordering within packets is then optimized
+    with the shared local search.
+    """
+    if cp_model is None:
+        raise RuntimeError("cpsat_solver requires ortools: pip install -r requirements-dev.txt")
+    started = time.perf_counter()
+    reasons = check_pool_feasibility(pool, spec)
+    if reasons:
+        raise InfeasibleError(reasons)
+    index = PoolIndex.from_pool(pool)
+    scorer = CachedScorer(scorer)
+
+    model = cp_model.CpModel()
+    packets = range(spec.packet_count)
+    ids = (*index.tossup_ids, *index.bonus_ids)
+    x = {(q, p): model.NewBoolVar(f"x_{n}_{p}") for n, q in enumerate(ids) for p in packets}
+    for q in ids:
+        model.AddAtMostOne(x[q, p] for p in packets)
+
+    def matching(selector) -> list[str]:
+        return [q for q in ids if selector.matches(index.selector_of[q])]
+
+    def packet_sum(questions, p):
+        return sum(x[q, p] for q in questions)
+
+    by_type = {"tossup": index.tossup_ids, "bonus": index.bonus_ids}
+    capacities = {"tossup": spec.tossup_capacity, "bonus": spec.bonus_capacity}
+    for p in packets:
+        for question_type, capacity in capacities.items():
+            model.Add(packet_sum(by_type[question_type], p) == capacity)
+        for quota in spec.quotas:
+            expr = packet_sum(matching(quota.selector), p)
+            model.Add(expr >= quota.minimum)
+            if quota.maximum is not None:
+                model.Add(expr <= quota.maximum)
+        for rule_number, rule in enumerate(spec.allowed_patterns):
+            if isinstance(rule, AllowedCountPatterns):
+                counts = []
+                for selector in rule.selectors:
+                    var = model.NewIntVar(0, spec.tossup_capacity + spec.bonus_capacity, "")
+                    model.Add(var == packet_sum(matching(selector), p))
+                    counts.append(var)
+                model.AddAllowedAssignments(counts, [list(pattern) for pattern in rule.patterns])
+            else:
+                in_rule = {
+                    question_type: [
+                        q
+                        for q in by_type[question_type]
+                        if index.category_of[q] in rule.categories
+                    ]
+                    for question_type in by_type
+                }
+                model.Add(packet_sum(in_rule["tossup"], p) == rule.tossup_count)
+                model.Add(packet_sum(in_rule["bonus"], p) == rule.bonus_count)
+                if rule.distinct_categories:
+                    for category in rule.categories:
+                        questions = [
+                            q for q in ids if index.category_of[q] == category
+                        ]
+                        model.Add(packet_sum(questions, p) <= 1)
+
+    for quota in spec.aggregate_quotas:
+        total = sum(packet_sum(matching(quota.selector), p) for p in packets)
+        model.Add(total >= quota.minimum)
+        if quota.maximum is not None:
+            model.Add(total <= quota.maximum)
+
+    for question_type, questions in by_type.items():
+        bound = next(
+            (b for b in spec.leftover_bounds if b.question_type == question_type),
+            LeftoverBound(question_type),
+        )
+        leftover = len(questions) - sum(packet_sum(questions, p) for p in packets)
+        model.Add(leftover >= bound.minimum)
+        if bound.maximum is not None:
+            model.Add(leftover <= bound.maximum)
+
+    pair_scores = sorted(
+        (
+            (scorer.score(a, b), a, b)
+            for questions in by_type.values()
+            for a, b in combinations(questions, 2)
+        ),
+        reverse=True,
+    )[:top_pairs]
+    penalties = []
+    for score, a, b in pair_scores:
+        weight = round(score * weights.same_packet * PENALTY_SCALE)
+        if weight <= 0:
+            continue
+        for p in packets:
+            together = model.NewBoolVar("")
+            model.Add(together >= x[a, p] + x[b, p] - 1)
+            penalties.append(weight * together)
+    model.Minimize(sum(penalties))
+
+    solver = cp_model.CpSolver()
+    solver.parameters.max_time_in_seconds = time_limit
+    solver.parameters.num_workers = workers
+    solver.parameters.random_seed = seed
+    status = solver.Solve(model)
+    if status == cp_model.INFEASIBLE:
+        raise InfeasibleError(["CP-SAT proved the hard rules infeasible"])
+    if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        raise InfeasibleError([f"CP-SAT found no solution within {time_limit}s"])
+
+    rng = random.Random(seed)
+    layouts = []
+    for p in packets:
+        tossups = tuple(q for q in index.tossup_ids if solver.BooleanValue(x[q, p]))
+        bonuses = tuple(q for q in index.bonus_ids if solver.BooleanValue(x[q, p]))
+        layouts.append(
+            optimize_order(
+                PacketLayout(tossups, bonuses), index.category_of, scorer, weights, rng
+            )
+        )
+    return finish_result(
+        "cp-sat",
+        seed,
+        index,
+        spec,
+        layouts,
+        scorer,
+        weights,
+        time.perf_counter() - started,
+        {
+            "status": solver.StatusName(status),
+            "objective": solver.ObjectiveValue() / PENALTY_SCALE,
+            "bound": solver.BestObjectiveBound() / PENALTY_SCALE,
+        },
+    )

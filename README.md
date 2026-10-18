@@ -95,6 +95,22 @@ category names match the broad question category and include all subcategories.
 Loading validates the schema version and rule structure and reports errors
 with the file path.
 
+## Building packets (Step 2 prototype)
+
+```python
+from packetizer import *
+pool = load_question_pool_csv("Question Pool.csv")
+spec = load_template("templates/acf-winter-final.json").create_spec(16)
+result = solve_baseline(pool, spec, build_similarity(pool), seed=0)  # or solve_cpsat
+```
+
+- `check_pool_feasibility` / `max_feasible_packets` report necessary conditions before solving; solvers raise `InfeasibleError` rather than relaxing a hard rule.
+- `build_similarity` combines TF-IDF text similarity with category/subcategory overlap (`SimilarityWeights`, default 0.9/0.07/0.03, chosen against the reviewed pairs in `calibration/similarity_pairs.json`). Pass `text_scorer=` (any object with `score(first_id, second_id)` in [0, 1]) to swap in an embedding model; in testing, bge-small embeddings did not beat TF-IDF on the reviewed pairs. Soft penalties (`SoftWeights`): adjacent same-category tossups, similar questions in one packet, and similar questions within a nearby window.
+- `solve_baseline` is pure Python: a random hard-rule-valid construction, then swap local search. It requires exact selectors in explicit pattern rules.
+- `solve_cpsat` needs `ortools` (`pip install -r requirements-dev.txt`). Hard rules are exact constraints, but only the most similar pairs (`top_pairs`) enter its objective. It defaults to one worker because multi-worker search hung on macOS in testing.
+- `python3 -m utilities.benchmark_solvers` compares them. On the sample pool both are always valid in 1–3 s. The baseline scores 10–13% lower (better) on the full soft score, so it is the default choice.
+- Similarity calibration lives in `calibration/`: `similarity_pairs.json` holds the 60 reviewed pairs (`label` = a player would notice a shared topic; `borderline` = unsure, skipped by default). `python3 -m calibration.evaluate_similarity [--embeddings] [--include-borderline] [--weights TEXT SUB CAT]` compares scorers against them (`--weights` scores your own blend). `calibration.sample_similarity_pairs` draws a fresh sample, and `calibration.review_pairs` exports/imports a markdown review sheet. Rerun the evaluation before changing `SimilarityWeights` defaults.
+
 ## Tests
 
 ```sh

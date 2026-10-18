@@ -9,7 +9,19 @@ from .build_spec import (
     validate_distribution,
 )
 from .csv_import import load_question_pool_csv
+from .feasibility import check_pool_feasibility, max_feasible_packets, pool_counts
+from .baseline_solver import solve_baseline
+from .cpsat_solver import solve_cpsat
 from .json_import import load_question_set
+from .scoring import PacketLayout, SoftScore, SoftWeights, score_layouts
+from .solving import InfeasibleError, SolverResult, validate_layouts
+from .similarity import (
+    CombinedSimilarity,
+    SimilarityWeights,
+    TfidfSimilarity,
+    build_similarity,
+    question_text,
+)
 from .model import (
     Bonus,
     BonusPart,
@@ -32,6 +44,11 @@ from .templates import BuildTemplate
 
 __all__ = [
     "Bonus",
+    "CombinedSimilarity",
+    "SimilarityWeights",
+    "TfidfSimilarity",
+    "build_similarity",
+    "question_text",
     "BonusPart",
     "BuildTemplate",
     "AggregateQuota",
@@ -49,6 +66,18 @@ __all__ = [
     "QuestionSetMetadata",
     "Tossup",
     "Topic",
+    "InfeasibleError",
+    "PacketLayout",
+    "SoftScore",
+    "SoftWeights",
+    "SolverResult",
+    "score_layouts",
+    "solve_baseline",
+    "solve_cpsat",
+    "validate_layouts",
+    "check_pool_feasibility",
+    "max_feasible_packets",
+    "pool_counts",
     "load_question_pool_csv",
     "load_question_set",
     "validate_distribution",
