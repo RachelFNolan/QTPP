@@ -19,9 +19,12 @@ from .scoring import PacketLayout, SoftScore, SoftWeights, score_layouts
 from .solving import InfeasibleError, SolverResult, validate_layouts
 from .similarity import (
     CombinedSimilarity,
+    FamilyPenaltyScorer,
     SimilarityWeights,
     TfidfSimilarity,
     build_similarity,
+    load_curated_families,
+    question_families,
     question_text,
 )
 from .model import (
@@ -47,6 +50,9 @@ from .templates import BuildTemplate
 __all__ = [
     "Bonus",
     "CombinedSimilarity",
+    "FamilyPenaltyScorer",
+    "load_curated_families",
+    "question_families",
     "SimilarityWeights",
     "TfidfSimilarity",
     "build_similarity",

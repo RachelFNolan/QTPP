@@ -2,3 +2,6 @@
 # The core packetizer package uses only the standard library.
 ortools>=9.10
 scikit-learn>=1.4
+# Optional backends for utilities/suggest_families.py (either one).
+fastembed
+sentence-transformers

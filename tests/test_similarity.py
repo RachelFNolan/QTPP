@@ -1,11 +1,18 @@
+import tempfile
 import unittest
 from pathlib import Path
 
 from packetizer import (
+    FamilyPenaltyScorer,
+    QuestionMetadata,
     SimilarityWeights,
     TfidfSimilarity,
+    Topic,
+    Tossup,
     build_similarity,
+    load_curated_families,
     load_question_pool_csv,
+    question_families,
 )
 from packetizer.similarity import CombinedSimilarity, primary_answer
 
@@ -57,6 +64,70 @@ class SimilarityTests(unittest.TestCase):
         scorer = build_similarity(pool, SimilarityWeights(1, 0, 0), text_scorer=Constant())
         first, second = pool.tossups[0].metadata.id, pool.tossups[1].metadata.id
         self.assertAlmostEqual(scorer.score(first, second), 1.0)
+    def test_family_penalty_uses_alternate_subcategory_and_skips_catch_alls(self) -> None:
+        def tossup(question_id, alternate):
+            return Tossup(
+                QuestionMetadata(question_id, Topic("Science", "Other Science", alternate)),
+                "q",
+                "a",
+            )
+
+        questions = [
+            tossup("m1", "Math"),
+            tossup("m2", "math"),
+            tossup("c1", "Computer Science"),
+            tossup("x1", "Misc Literature"),
+            tossup("x2", "Misc Literature"),
+            tossup("n1", None),
+        ]
+        families = question_families(questions)
+        self.assertEqual(families["m1"], families["m2"])
+        self.assertEqual(families["x1"], frozenset())
+        self.assertEqual(families["n1"], frozenset())
+
+        class Constant:
+            def score(self, first_id: str, second_id: str) -> float:
+                return 0.1
+
+        scorer = FamilyPenaltyScorer(Constant(), families, 0.5)
+        self.assertAlmostEqual(scorer.score("m1", "m2"), 0.6)
+        self.assertAlmostEqual(scorer.score("m1", "c1"), 0.1)
+        self.assertAlmostEqual(scorer.score("x1", "x2"), 0.1)
+        self.assertAlmostEqual(FamilyPenaltyScorer(Constant(), families, 0.95).score("m1", "m2"), 1.0)
+        with self.assertRaises(ValueError):
+            FamilyPenaltyScorer(Constant(), families, -1)
+
+    def test_curated_families_override_and_load(self) -> None:
+        questions = [
+            Tossup(QuestionMetadata("a", Topic("History", "Other History")), "q", "a"),
+            Tossup(QuestionMetadata("b", Topic("History", "Other History")), "q", "a"),
+            Tossup(QuestionMetadata("c", Topic("Science", "Other Science", "Math")), "q", "a"),
+        ]
+        families = question_families(questions, {"a": ["Military"], "b": ["military"], "c": []})
+        self.assertEqual(families["a"], families["b"])
+        self.assertEqual(families["c"], frozenset())
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "families.json"
+            path.write_text('{"families": {"a": ["Military"]}}', encoding="utf-8")
+            self.assertEqual(load_curated_families(path), {"a": ["Military"]})
+            path.write_text('{"families": {"a": "Military"}}', encoding="utf-8")
+            with self.assertRaises(ValueError):
+                load_curated_families(path)
+
+    def test_build_similarity_penalty_is_opt_in(self) -> None:
+        pool = load_question_pool_csv(POOL)
+        math = [
+            q.metadata.id
+            for q in (*pool.tossups, *pool.bonuses)
+            if q.metadata.topic.alternate_subcategory == "Math"
+        ]
+        plain = build_similarity(pool)
+        penalized = build_similarity(pool, family_penalty=0.3)
+        self.assertAlmostEqual(plain.score(math[0], math[1]) + 0.3, penalized.score(math[0], math[1]))
+        other = next(
+            q.metadata.id for q in pool.tossups if q.metadata.topic.alternate_subcategory != "Math"
+        )
+        self.assertAlmostEqual(plain.score(math[0], other), penalized.score(math[0], other))
 
 
 if __name__ == "__main__":

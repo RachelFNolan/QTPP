@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 import math
 import re
 from collections import Counter
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Iterable, Mapping, Protocol
 
 from .model import Bonus, QuestionSet, Tossup
@@ -136,19 +138,105 @@ def question_topics(
     }
 
 
+GENERIC_FAMILIES = frozenset({"misc literature", "misc arts", "other social science"})
+
+
+def _normalize_family(value: str) -> str:
+    return " ".join(value.split()).casefold()
+
+
+def question_families(
+    questions: Iterable[Tossup | Bonus],
+    curated: Mapping[str, Iterable[str]] | None = None,
+    excluded: Iterable[str] = GENERIC_FAMILIES,
+) -> dict[str, frozenset[str]]:
+    """Topic families per question ID.
+
+    A question's family is its alternate subcategory unless it is a catch-all
+    in ``excluded``. A curated entry replaces the automatic family for that ID;
+    an empty list removes it.
+    """
+    skip = {_normalize_family(name) for name in excluded}
+    curated = curated or {}
+    families: dict[str, frozenset[str]] = {}
+    for question in questions:
+        question_id = question.metadata.id
+        if question_id in curated:
+            found = {_normalize_family(name) for name in curated[question_id]}
+        else:
+            alternate = question.metadata.topic.alternate_subcategory
+            found = {_normalize_family(alternate)} if alternate else set()
+        families[question_id] = frozenset(found - skip)
+    return families
+
+
+class FamilyPenaltyScorer:
+    """Raises the score of pairs that share a topic family, capped at 1.
+
+    Wrapping a pair scorer makes every solver's same-packet and nearby penalties
+    discourage repeated families without changing their code.
+    """
+
+    def __init__(
+        self,
+        scorer: PairScorer,
+        families: Mapping[str, frozenset[str]],
+        penalty: float,
+    ) -> None:
+        if penalty < 0:
+            raise ValueError("family penalty must be non-negative")
+        self._scorer = scorer
+        self._families = families
+        self._penalty = penalty
+
+    def score(self, first_id: str, second_id: str) -> float:
+        value = self._scorer.score(first_id, second_id)
+        if self._penalty and self._families[first_id] & self._families[second_id]:
+            return min(1.0, value + self._penalty)
+        return value
+
+
+def load_curated_families(path: str | Path) -> dict[str, list[str]]:
+    """Read {"families": {question_id: [family, ...]}} for per-question overrides."""
+    source = Path(path)
+    try:
+        data = json.loads(source.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as error:
+        raise ValueError(f"{source}: invalid JSON: {error}") from error
+    families = data.get("families") if isinstance(data, dict) else None
+    if not isinstance(families, dict) or any(
+        not isinstance(names, list) or any(not isinstance(name, str) for name in names)
+        for names in families.values()
+    ):
+        raise ValueError(f"{source}: expected {{\"families\": {{question_id: [family, ...]}}}}")
+    return families
+
+
 def build_similarity(
     pool: QuestionSet,
     weights: SimilarityWeights = SimilarityWeights(),
     text_scorer: PairScorer | None = None,
-) -> CombinedSimilarity:
+    *,
+    family_penalty: float = 0.0,
+    curated_families: Mapping[str, Iterable[str]] | None = None,
+    excluded_families: Iterable[str] = GENERIC_FAMILIES,
+) -> PairScorer:
     """Combined similarity over every tossup and bonus in a pool, keyed by question ID.
 
     text_scorer replaces the built-in TF-IDF text similarity, for example with
     an embedding model. It must implement score(first_id, second_id) -> [0, 1]
     for any two question IDs in the pool; use question_text() to get the text.
+
+    A positive family_penalty adds to the score of pairs sharing a topic family
+    (alternate subcategory such as Math or Poetry, or a curated override), so
+    solvers keep them apart. The default of 0 leaves scores unchanged.
     """
     questions: list[Tossup | Bonus] = [*pool.tossups, *pool.bonuses]
     if text_scorer is None:
         texts = {question.metadata.id: question_text(question) for question in questions}
         text_scorer = TfidfSimilarity(texts)
-    return CombinedSimilarity(text_scorer, question_topics(questions), weights)
+    combined = CombinedSimilarity(text_scorer, question_topics(questions), weights)
+    if not family_penalty:
+        return combined
+    families = question_families(questions, curated_families, excluded_families)
+    return FamilyPenaltyScorer(combined, families, family_penalty)
