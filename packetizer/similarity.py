@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Iterable, Mapping, Protocol
 
 from .model import Bonus, QuestionSet, Tossup
+from .taxonomy import load_taxonomy
 
 _TOKEN = re.compile(r"[a-z0-9]+(?:'[a-z]+)?")
 _STOPWORDS = frozenset(
@@ -138,7 +139,7 @@ def question_topics(
     }
 
 
-GENERIC_FAMILIES = frozenset({"misc literature", "misc arts", "other social science"})
+GENERIC_FAMILIES = frozenset({"misc literature", "misc arts", "other social science", "other"})
 
 
 def _normalize_family(value: str) -> str:
@@ -149,15 +150,18 @@ def question_families(
     questions: Iterable[Tossup | Bonus],
     curated: Mapping[str, Iterable[str]] | None = None,
     excluded: Iterable[str] = GENERIC_FAMILIES,
+    aliases: Mapping[str, str] | None = None,
 ) -> dict[str, frozenset[str]]:
     """Topic families per question ID.
 
     A question's family is its alternate subcategory unless it is a catch-all
     in ``excluded``. A curated entry replaces the automatic family for that ID;
-    an empty list removes it.
+    an empty list removes it. ``aliases`` maps normalized names to a canonical
+    family (for example "math" to "Mathematics") before comparison.
     """
     skip = {_normalize_family(name) for name in excluded}
     curated = curated or {}
+    canonical = {_normalize_family(key): _normalize_family(value) for key, value in (aliases or {}).items()}
     families: dict[str, frozenset[str]] = {}
     for question in questions:
         question_id = question.metadata.id
@@ -166,6 +170,7 @@ def question_families(
         else:
             alternate = question.metadata.topic.alternate_subcategory
             found = {_normalize_family(alternate)} if alternate else set()
+        found = {canonical.get(name, name) for name in found}
         families[question_id] = frozenset(found - skip)
     return families
 
@@ -182,16 +187,64 @@ class FamilyPenaltyScorer:
         scorer: PairScorer,
         families: Mapping[str, frozenset[str]],
         penalty: float,
+        suggested: Mapping[str, frozenset[str]] | None = None,
+        suggested_penalty: float = 0.0,
     ) -> None:
-        if penalty < 0:
+        if penalty < 0 or suggested_penalty < 0:
             raise ValueError("family penalty must be non-negative")
         self._scorer = scorer
         self._families = families
         self._penalty = penalty
+        self._suggested = suggested or {}
+        self._suggested_penalty = suggested_penalty
 
     def score(self, first_id: str, second_id: str) -> float:
         value = self._scorer.score(first_id, second_id)
-        if self._penalty and self._families[first_id] & self._families[second_id]:
+        first, second = self._families[first_id], self._families[second_id]
+        if self._penalty and first & second:
+            return min(1.0, value + self._penalty)
+        if self._suggested_penalty and self._suggested:
+            first |= self._suggested.get(first_id, frozenset())
+            second |= self._suggested.get(second_id, frozenset())
+            if first & second:
+                return min(1.0, value + self._suggested_penalty)
+        return value
+
+
+def question_categories(questions: Iterable[Tossup | Bonus]) -> dict[str, str]:
+    return {q.metadata.id: q.metadata.topic.category for q in questions}
+
+
+class SharedTagPenaltyScorer:
+    """Raises the score of same-category pairs that share a single-valued tag (era, region)."""
+
+    def __init__(
+        self,
+        scorer: PairScorer,
+        tags: Mapping[str, str],
+        categories: Mapping[str, str],
+        scoped: set[str],
+        penalty: float,
+    ) -> None:
+        if penalty < 0:
+            raise ValueError("tag penalty must be non-negative")
+        self._scorer = scorer
+        self._tags = tags
+        self._categories = categories
+        self._scoped = {_normalize_family(name) for name in scoped}
+        self._penalty = penalty
+
+    def score(self, first_id: str, second_id: str) -> float:
+        value = self._scorer.score(first_id, second_id)
+        first, second = self._tags.get(first_id), self._tags.get(second_id)
+        category = self._categories.get(first_id)
+        if (
+            first is not None
+            and first == second
+            and category == self._categories.get(second_id)
+            and category is not None
+            and _normalize_family(category) in self._scoped
+        ):
             return min(1.0, value + self._penalty)
         return value
 
@@ -220,6 +273,15 @@ def build_similarity(
     family_penalty: float = 0.0,
     curated_families: Mapping[str, Iterable[str]] | None = None,
     excluded_families: Iterable[str] = GENERIC_FAMILIES,
+    family_aliases: Mapping[str, str] | None = None,
+    suggested_families: Mapping[str, Iterable[str]] | None = None,
+    suggested_penalty: float | None = None,
+    eras: Mapping[str, str] | None = None,
+    regions: Mapping[str, str] | None = None,
+    era_penalty: float = 0.0,
+    region_penalty: float = 0.0,
+    era_categories: Iterable[str] = ("History", "Literature"),
+    region_categories: Iterable[str] = ("History",),
 ) -> PairScorer:
     """Combined similarity over every tossup and bonus in a pool, keyed by question ID.
 
@@ -229,14 +291,60 @@ def build_similarity(
 
     A positive family_penalty adds to the score of pairs sharing a topic family
     (alternate subcategory such as Math or Poetry, or a curated override), so
-    solvers keep them apart. The default of 0 leaves scores unchanged.
+    solvers keep them apart. family_aliases (default: the default
+    taxonomy's alias_map(); pass {} to disable) merges names such as Math and Mathematics. The default of 0
+    leaves scores unchanged.
+
+    suggested_families ({question_id: [label]}, for example from
+    family_suggest.suggested_tags) are unreviewed model proposals. A pair that
+    shares a suggested family but no confirmed one is penalized by
+    suggested_penalty (default: half of family_penalty), so uncertain tags
+    nudge the solver without counting as much as confirmed ones. Confirmed
+    families still take precedence and are never replaced by suggestions.
+
+    era_penalty / region_penalty similarly penalize same-category pairs that
+    share an era or region tag (see time_place.detect_eras / detect_regions or
+    load_time_place_tags); only categories listed in era_categories /
+    region_categories are affected. Tags are explicit inputs, never inferred
+    silently.
     """
     questions: list[Tossup | Bonus] = [*pool.tossups, *pool.bonuses]
     if text_scorer is None:
         texts = {question.metadata.id: question_text(question) for question in questions}
         text_scorer = TfidfSimilarity(texts)
     combined = CombinedSimilarity(text_scorer, question_topics(questions), weights)
-    if not family_penalty:
-        return combined
-    families = question_families(questions, curated_families, excluded_families)
-    return FamilyPenaltyScorer(combined, families, family_penalty)
+    scorer: PairScorer = combined
+    if suggested_penalty is None:
+        suggested_penalty = family_penalty / 2
+    if family_penalty or (suggested_families and suggested_penalty):
+        if family_aliases is None:
+            family_aliases = load_taxonomy().alias_map()
+        families = question_families(
+            questions, curated_families, excluded_families, family_aliases
+        )
+        suggested = (
+            question_families(
+                questions,
+                {key: list(value) for key, value in suggested_families.items()},
+                excluded_families,
+                family_aliases,
+            )
+            if suggested_families
+            else None
+        )
+        if suggested is not None:
+            suggested = {
+                key: value for key, value in suggested.items() if key in suggested_families
+            }
+        scorer = FamilyPenaltyScorer(
+            scorer, families, family_penalty, suggested, suggested_penalty
+        )
+    for tags, penalty, scoped in (
+        (eras, era_penalty, era_categories),
+        (regions, region_penalty, region_categories),
+    ):
+        if penalty and tags:
+            scorer = SharedTagPenaltyScorer(
+                scorer, tags, question_categories(questions), set(scoped), penalty
+            )
+    return scorer

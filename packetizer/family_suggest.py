@@ -15,6 +15,7 @@ from typing import Callable, Iterable, Mapping, Sequence
 
 from .model import Bonus, QuestionSet, Tossup
 from .similarity import TfidfSimilarity, question_text
+from .taxonomy import Taxonomy, label_texts, normalize
 
 # Maps (question texts, label texts) to a similarity matrix [question][label].
 SimilarityFn = Callable[[Sequence[str], Sequence[str]], list[list[float]]]
@@ -33,6 +34,8 @@ class Suggestion:
     runner_up: str | None
     runner_up_score: float
     text: str
+    status: str = "unsure"
+    category: str = ""
 
 
 def load_labels(path: str | Path) -> dict[str, list[str]]:
@@ -185,8 +188,116 @@ def suggest_families(
                 runner_up=names[second] if second is not None else None,
                 runner_up_score=round(second_score, 4),
                 text=" ".join(text.split())[:SNIPPET_LENGTH],
+                status="review" if confident else "unsure",
+                category=question.metadata.topic.category,
             )
         )
+    return suggestions
+
+
+def _top_k_mean(values: Sequence[float], k: int = 3) -> float:
+    top = sorted(values, reverse=True)[:k]
+    return sum(top) / len(top)
+
+
+def suggest_with_taxonomy(
+    pool: QuestionSet,
+    taxonomy: Taxonomy,
+    similarity: SimilarityFn = tfidf_similarity,
+    *,
+    curated: Mapping[str, object] | None = None,
+    use_examples: bool = True,
+    min_examples: int = 5,
+    min_score: float = 0.0,
+    min_margin: float = 0.02,
+    auto_margin: float | None = None,
+) -> list[Suggestion]:
+    """Classify every untagged question against its category's taxonomy labels.
+
+    Zero-shot similarity to the label descriptions is the base. Labels that
+    already have at least min_examples tagged questions in the pool (after alias
+    mapping) also get an example-based score; when both signals apply to the
+    zero-shot winner and disagree, the question is left unsure for review.
+    Status is "auto" when the winner leads the runner-up by at least auto_margin
+    (margin predicted accuracy better than raw score in testing),
+    "review" for other proposals, and "unsure" when no label is proposed.
+    """
+    curated = curated or {}
+    suggestions: list[Suggestion] = []
+    for category in taxonomy.categories.values():
+        names = [label.name for label in category.labels]
+        candidates = [
+            question
+            for question in questions_missing_family(pool, curated)
+            if normalize(question.metadata.topic.category) == normalize(category.name)
+            and category.allows(question.metadata.topic.subcategory)
+        ]
+        if not candidates:
+            continue
+        targets = [text for label in category.labels for text in label_texts(label)]
+        owners = [index for index, label in enumerate(category.labels) for _ in label_texts(label)]
+        texts = [question_text(question) for question in candidates]
+        zero_shot = similarity(texts, targets)
+
+        examples: dict[int, list[str]] = {}
+        for question in (*pool.tossups, *pool.bonuses):
+            topic = question.metadata.topic
+            alternate = (topic.alternate_subcategory or "").strip()
+            if not alternate or normalize(topic.category) != normalize(category.name):
+                continue
+            label = category.canonical(alternate)
+            if label is not None:
+                examples.setdefault(names.index(label), []).append(question_text(question))
+        examples = {k: v for k, v in examples.items() if len(v) >= min_examples} if use_examples else {}
+        example_scores: list[list[float]] = []
+        example_owners: list[int] = []
+        if examples:
+            example_texts = [text for index in examples for text in examples[index]]
+            example_owners = [index for index in examples for _ in examples[index]]
+            example_scores = similarity(texts, example_texts)
+
+        for position, (question, text, row) in enumerate(zip(candidates, texts, zero_shot)):
+            subcategory = question.metadata.topic.subcategory
+            best = [-math.inf] * len(names)
+            for owner, value in zip(owners, row):
+                best[owner] = max(best[owner], value)
+            for index, label in enumerate(category.labels):
+                if not label.allows(subcategory):
+                    best[index] = -math.inf
+            ranked = [i for i in sorted(range(len(names)), key=lambda i: best[i], reverse=True) if best[i] > -math.inf]
+            if not ranked:
+                continue
+            top = ranked[0]
+            second = ranked[1] if len(ranked) > 1 else None
+            second_score = best[second] if second is not None else 0.0
+            confident = best[top] >= min_score and best[top] - second_score >= min_margin
+            if confident and top in examples:
+                by_label: dict[int, list[float]] = {}
+                for owner, value in zip(example_owners, example_scores[position]):
+                    by_label.setdefault(owner, []).append(value)
+                allowed = [i for i in by_label if category.labels[i].allows(subcategory)]
+                if allowed:
+                    example_top = max(allowed, key=lambda i: _top_k_mean(by_label[i]))
+                    confident = example_top == top
+            if not confident:
+                status = "unsure"
+            elif auto_margin is not None and best[top] - second_score >= auto_margin:
+                status = "auto"
+            else:
+                status = "review"
+            suggestions.append(
+                Suggestion(
+                    question_id=question.metadata.id,
+                    label=names[top] if confident else None,
+                    best_guess=names[top],
+                    score=round(best[top], 4),
+                    runner_up=names[second] if second is not None else None,
+                    runner_up_score=round(second_score, 4),
+                    text=" ".join(text.split())[:SNIPPET_LENGTH],
+                    status=status,
+                    category=category.name,
+                )
+            )
     return suggestions
 
 
@@ -194,7 +305,8 @@ def save_suggestions(suggestions: Sequence[Suggestion], path: str | Path) -> Non
     data = {
         "note": (
             'Review each entry. "label" is the proposed tag (null = unsure; see "best_guess"). '
-            "Edit or clear labels, then run approve to produce a families file."
+            '"status" is auto (high confidence), review or unsure. Edit or clear labels, '
+            "then run approve to produce a families file."
         ),
         "suggestions": [
             {
@@ -204,6 +316,8 @@ def save_suggestions(suggestions: Sequence[Suggestion], path: str | Path) -> Non
                 "score": item.score,
                 "runner_up": item.runner_up,
                 "runner_up_score": item.runner_up_score,
+                "status": item.status,
+                "category": item.category,
                 "text": item.text,
             }
             for item in suggestions
@@ -212,10 +326,12 @@ def save_suggestions(suggestions: Sequence[Suggestion], path: str | Path) -> Non
     Path(path).write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
-def approve_suggestions(path: str | Path) -> dict[str, list[str]]:
+def approve_suggestions(path: str | Path, auto_only: bool = False) -> dict[str, list[str]]:
     """Turn a reviewed suggestions file into {question_id: [label]} for curated families.
 
-    Entries whose label is null or empty are left out.
+    Entries whose label is null or empty are left out. With auto_only, only
+    entries with status "auto" are kept, so unreviewed high-confidence tags can
+    be accepted without reading the rest.
     """
     source = Path(path)
     try:
@@ -231,6 +347,22 @@ def approve_suggestions(path: str | Path) -> dict[str, list[str]]:
         question_id = entry.get("question_id") if isinstance(entry, dict) else None
         if not isinstance(question_id, str):
             raise ValueError(f"{source}: every suggestion needs a question_id")
+        if auto_only and entry.get("status") != "auto":
+            continue
         if isinstance(label, str) and label.strip():
             families[question_id] = [label.strip()]
     return families
+
+
+def suggested_tags(
+    pool: QuestionSet,
+    taxonomy: Taxonomy | None = None,
+    similarity: SimilarityFn = tfidf_similarity,
+    **options: object,
+) -> dict[str, list[str]]:
+    """Proposed {question_id: [label]} for untagged questions, ready for
+    build_similarity(suggested_families=...). Unsure questions are omitted."""
+    from .taxonomy import load_taxonomy
+
+    suggestions = suggest_with_taxonomy(pool, taxonomy or load_taxonomy(), similarity, **options)
+    return {item.question_id: [item.label] for item in suggestions if item.label}

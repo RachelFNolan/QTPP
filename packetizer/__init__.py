@@ -45,9 +45,25 @@ from .template_json import (
     template_from_dict,
     template_to_dict,
 )
+from .family_suggest import approve_suggestions, suggest_families, suggest_with_taxonomy, suggested_tags
+from .taxonomy import Taxonomy, load_taxonomy
+from .time_place import (
+    detect_eras,
+    detect_regions,
+    load_time_place_tags,
+)
 from .templates import BuildTemplate
 
 __all__ = [
+    "Taxonomy",
+    "approve_suggestions",
+    "detect_eras",
+    "detect_regions",
+    "load_taxonomy",
+    "load_time_place_tags",
+    "suggest_families",
+    "suggest_with_taxonomy",
+    "suggested_tags",
     "Bonus",
     "CombinedSimilarity",
     "FamilyPenaltyScorer",
