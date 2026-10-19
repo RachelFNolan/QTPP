@@ -1,0 +1,196 @@
+{
+  "categories": {
+    "Science": {
+      "subcategories": ["Other Science"],
+      "catch_all": ["Other"],
+      "labels": {
+        "Mathematics": {
+          "aliases": ["Math"],
+          "description": [
+            "mathematics: theorems, proofs, conjectures, algebra, topology, number theory, geometry, calculus, mathematicians",
+            "functions, groups, manifolds, matrices, prime numbers, probability and statistics"
+          ]
+        },
+        "Astrophysics": {
+          "aliases": ["Astronomy"],
+          "description": [
+            "astrophysics and astronomy: stars, galaxies, black holes, planets, telescopes, cosmology, supernovae, exoplanets",
+            "spacecraft, missions, orbits, the Sun, the Big Bang, dark matter, neutron stars"
+          ]
+        },
+        "Earth Science": {
+          "description": [
+            "earth science: geology, minerals, rocks, volcanoes, earthquakes, plate tectonics, glaciers, oceans, atmosphere, climate",
+            "meteorology, hydrology, fossils, soil, geochemistry, paleoclimate"
+          ]
+        },
+        "Engineering": {
+          "description": [
+            "engineering: machines, structures, bridges, circuits, materials, aircraft, engines, manufacturing, inventors",
+            "electrical, mechanical, civil and chemical engineering, control systems, robotics, devices and their design"
+          ]
+        },
+        "Computer Science": {
+          "description": [
+            "computer science: algorithms, data structures, programming languages, complexity, networks, cryptography, software, machine learning"
+          ]
+        }
+      }
+    },
+    "Literature": {
+      "catch_all": ["Other", "Misc Literature"],
+      "labels": {
+        "Drama": {
+          "description": [
+            "drama: plays, playwrights, tragedies, comedies, characters in a play, acts and scenes, stage productions, theater",
+            "dramatist, dialogue, monologue, premiere, playbill, verse drama"
+          ]
+        },
+        "Poetry": {
+          "description": [
+            "poetry: poems, poets, verse, stanzas, sonnets, odes, epics in verse, meter, rhyme, collections of poems",
+            "lines of a poem, speaker of the poem, poetic form, lyric, ballad, elegy"
+          ]
+        },
+        "Long Fiction": {
+          "description": [
+            "long fiction: novels, novelists, protagonists, chapters, narrators, sagas, serialized novels, a novel's plot and characters",
+            "novel set in a place, family saga, bildungsroman, epistolary novel"
+          ]
+        },
+        "Short Fiction": {
+          "description": [
+            "short fiction: short stories, story collections, novellas, tales, short-story writers, a story's narrator and ending",
+            "stories published in magazines, fables, anthologized stories"
+          ]
+        }
+      }
+    },
+    "History": {
+      "catch_all": ["Other"],
+      "labels": {
+        "Military": {
+          "description": [
+            "military history: wars, battles, sieges, armies, navies, generals, campaigns, weapons, invasions, mercenaries",
+            "rebellions put down by force, fortifications, naval engagements, soldiers, conquests, mutinies"
+          ]
+        },
+        "Political": {
+          "description": [
+            "political history: rulers, kings, presidents, dynasties, governments, elections, parliaments, constitutions, laws, coups, revolutions",
+            "political parties, politicians, reforms, succession, empires and states, legislation, scandals"
+          ]
+        },
+        "Social": {
+          "description": [
+            "social history: everyday life, social movements, religion and society, class, race, gender, women, slavery, labor, migration, family, culture",
+            "customs, education, disease and public health, protest, ethnic groups, marginalized communities"
+          ]
+        },
+        "Economic": {
+          "description": [
+            "economic history: trade, commerce, finance, banking, currency, taxes, markets, commodities, industrialization, depressions, companies",
+            "trade routes, agriculture and land ownership, tariffs, the economy of a region, financial crises"
+          ]
+        }
+      }
+    },
+    "Fine Arts": {
+      "catch_all": ["Other", "Misc Arts"],
+      "labels": {
+        "Opera": {
+          "subcategories": ["Auditory Fine Arts", "Other Fine Arts"],
+          "description": [
+            "opera: operas, composers of opera, librettos, arias, overtures, sopranos, tenors, opera houses, operatic characters",
+            "an opera's plot, premiere, libretto adapted from a play or novel, Wagner, Verdi, Mozart operas"
+          ]
+        },
+        "Instruments": {
+          "subcategories": ["Auditory Fine Arts", "Other Fine Arts"],
+          "description": [
+            "musical instruments: violin, piano, organ, guitar, flute, brass, percussion, how an instrument is played or built, concertos for an instrument",
+            "instrument makers, orchestras and sections, strings, woodwinds, keyboards"
+          ]
+        },
+        "Painting": {
+          "subcategories": ["Visual Fine Arts", "Other Fine Arts"],
+          "description": [
+            "painting: paintings, painters, canvases, oil, frescoes, portraits, landscapes, art movements like Impressionism, pigments, museums",
+            "a painting's composition, subject, artist and style, altarpieces, murals, studios"
+          ]
+        },
+        "Architecture": {
+          "subcategories": ["Visual Fine Arts", "Other Fine Arts"],
+          "description": [
+            "architecture: buildings, architects, cathedrals, skyscrapers, domes, facades, columns, building styles, urban design, monuments",
+            "a building's design, construction and architect, Gothic, Baroque, modernist architecture"
+          ]
+        },
+        "Sculpture": {
+          "subcategories": ["Visual Fine Arts", "Other Fine Arts"],
+          "description": [
+            "sculpture: sculptures, sculptors, statues, marble, bronze casting, reliefs, busts, monuments, carving, installations",
+            "a statue's subject, material and sculptor, mobiles, public sculpture"
+          ]
+        },
+        "Specific Works": {
+          "description": [
+            "a single named composition such as a symphony, concerto, sonata, suite or album: its structure, movements, premiere and composer"
+          ]
+        },
+        "Dance": {
+          "subcategories": ["Auditory Fine Arts", "Other Fine Arts"],
+          "description": [
+            "dance: ballet, choreographers, dancers, choreography, ballets and their scores, modern dance, dance companies, steps and techniques"
+          ]
+        },
+        "Film": {
+          "subcategories": ["Other Fine Arts"],
+          "description": ["film: movies, directors, cinematography, screenplays, film movements, actors in films, studios"]
+        },
+        "Jazz": {
+          "subcategories": ["Auditory Fine Arts", "Other Fine Arts"],
+          "description": ["jazz: jazz musicians, bebop, improvisation, big bands, jazz albums, saxophonists, trumpeters, standards"]
+        },
+        "Photography": {
+          "subcategories": ["Visual Fine Arts", "Other Fine Arts"],
+          "description": ["photography: photographers, photographs, cameras, prints, photojournalism, exposures, photo series"]
+        }
+      }
+    },
+    "Social Science": {
+      "catch_all": ["Other", "Other Social Science"],
+      "labels": {
+        "Psychology": {
+          "description": [
+            "psychology: cognition, memory, behavior, experiments, therapy, disorders, development, perception, emotion, psychologists",
+            "cognitive biases, personality, learning, neuroscience of behavior, psychological studies"
+          ]
+        },
+        "Economics": {
+          "description": [
+            "economics: markets, supply and demand, inflation, monetary policy, game theory, economists, trade theory, growth, utility",
+            "models of the economy, auctions, labor markets, pricing, financial theory"
+          ]
+        },
+        "Anthropology": {
+          "description": [
+            "anthropology: cultures, ethnography, kinship, rituals, fieldwork, archaeology, human evolution, anthropologists, tribes",
+            "gift exchange, cultural relativism, indigenous societies"
+          ]
+        },
+        "Linguistics": {
+          "description": [
+            "linguistics: languages, grammar, phonology, syntax, morphology, language families, dialects, writing systems, linguists",
+            "sounds of language, word order, language change, semantics"
+          ]
+        },
+        "Sociology": {
+          "description": [
+            "sociology: society, institutions, class, inequality, social theory, urban life, deviance, sociologists, social networks, demographics"
+          ]
+        }
+      }
+    }
+  }
+}

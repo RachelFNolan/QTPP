@@ -103,6 +103,9 @@ with the file path.
 
 ## Building packets (Step 2 prototype)
 
+See [STEP-2-BENCHMARK.md](./STEP-2-BENCHMARK.md) for the current focused test results,
+similarity evaluation across the candidate scorers, and solver benchmark details.
+
 ```python
 from packetizer import *
 pool = load_question_pool_csv("Question Pool.csv")
