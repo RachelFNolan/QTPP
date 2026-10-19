@@ -15,6 +15,8 @@ from packetizer.scoring import PacketLayout, SoftWeights, placement_penalty, sco
 ROOT = Path(__file__).resolve().parents[1]
 POOL = ROOT / "Test Questions" / "2025 ACF Winter" / "Question Pool.csv"
 TEMPLATE = ROOT / "templates" / "acf-winter-final.json"
+FALL_POOL = ROOT / "Test Questions" / "2025 ACF Fall" / "Question Pool.csv"
+FALL_TEMPLATE = ROOT / "templates" / "acf-fall-final.json"
 
 
 class SolverTests(unittest.TestCase):
@@ -37,10 +39,31 @@ class SolverTests(unittest.TestCase):
         with self.assertRaises(InfeasibleError):
             solve_baseline(self.pool, self.template.create_spec(40), self.scorer)
 
+    def test_baseline_supports_grouped_fall_distribution(self) -> None:
+        pool = load_question_pool_csv(FALL_POOL)
+        template = load_template(FALL_TEMPLATE)
+        result = solve_baseline(
+            pool, template.create_spec(4), build_similarity(pool), seed=5, iterations=500
+        )
+        self.assertEqual(result.hard_errors, ())
+
     @unittest.skipIf(cp_model is None, "ortools not installed")
     def test_cpsat_meets_hard_rules(self) -> None:
         result = solve_cpsat(
             self.pool, self.template.create_spec(4), self.scorer, time_limit=10
+        )
+        self.assertEqual(result.hard_errors, ())
+
+    @unittest.skipIf(cp_model is None, "ortools not installed")
+    def test_cpsat_supports_grouped_fall_distribution(self) -> None:
+        pool = load_question_pool_csv(FALL_POOL)
+        template = load_template(FALL_TEMPLATE)
+        result = solve_cpsat(
+            pool,
+            template.create_spec(4),
+            build_similarity(pool),
+            time_limit=10,
+            top_pairs=300,
         )
         self.assertEqual(result.hard_errors, ())
 

@@ -6,6 +6,8 @@ from itertools import combinations
 
 from .build_spec import (
     AllowedCountPatterns,
+    CategoryGroupCountRule,
+    CategoryCountRule,
     LeftoverBound,
     PacketBuildSpec,
 )
@@ -86,7 +88,7 @@ def solve_cpsat(
                     model.Add(var == packet_sum(matching(selector), p))
                     counts.append(var)
                 model.AddAllowedAssignments(counts, [list(pattern) for pattern in rule.patterns])
-            else:
+            elif isinstance(rule, CategoryCountRule):
                 in_rule = {
                     question_type: [
                         q
@@ -103,6 +105,63 @@ def solve_cpsat(
                             q for q in ids if index.category_of[q] == category
                         ]
                         model.Add(packet_sum(questions, p) <= 1)
+            else:
+                for question_type, target in (
+                    ("tossup", rule.tossup_count),
+                    ("bonus", rule.bonus_count),
+                ):
+                    questions = [
+                        q
+                        for group in rule.groups
+                        for q in by_type[question_type]
+                        if index.category_of[q] in group.categories
+                    ]
+                    model.Add(packet_sum(questions, p) == target)
+                for group in rule.groups:
+                    questions = [
+                        q
+                        for q in ids
+                        if index.category_of[q] in group.categories
+                    ]
+                    model.Add(packet_sum(questions, p) == group.total_count)
+                    maximum_per_type = group.total_count - group.minimum_per_type
+                    for question_type in ("tossup", "bonus"):
+                        group_questions = [
+                            q
+                            for q in by_type[question_type]
+                            if index.category_of[q] in group.categories
+                        ]
+                        model.Add(
+                            packet_sum(group_questions, p) >= group.minimum_per_type
+                        )
+                        model.Add(packet_sum(group_questions, p) <= maximum_per_type)
+                    for category in group.categories:
+                        category_questions = [
+                            q for q in questions if index.category_of[q] == category
+                        ]
+                        model.Add(
+                            packet_sum(category_questions, p)
+                            >= group.minimum_per_category
+                        )
+                        if group.maximum_per_category_per_type is not None:
+                            for question_type in ("tossup", "bonus"):
+                                category_type_questions = [
+                                    q
+                                    for q in by_type[question_type]
+                                    if index.category_of[q] == category
+                                ]
+                                model.Add(
+                                    packet_sum(category_type_questions, p)
+                                    <= group.maximum_per_category_per_type
+                                )
+                    if group.distinct_categories:
+                        for category in group.categories:
+                            category_questions = [
+                                q
+                                for q in ids
+                                if index.category_of[q] == category
+                            ]
+                            model.Add(packet_sum(category_questions, p) <= 1)
 
     for quota in spec.aggregate_quotas:
         total = sum(packet_sum(matching(quota.selector), p) for p in packets)

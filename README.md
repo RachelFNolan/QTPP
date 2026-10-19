@@ -36,6 +36,8 @@ print(len(question_set.packets))
 
 The importer validates packet/set consistency and bonus part-array alignment, and reports malformed source data with its file and field.
 
+The packet JSON files in [`Test Questions/2025 ACF Fall`](./Test%20Questions/2025%20ACF%20Fall) were exported from the [QBReader 2025 ACF Fall set](https://www.qbreader.org/db/set/?_id=68fc54d55b5d7bee38aa3e0a). Load the directory with `load_question_set` in the same way as the Winter example.
+
 ## Combined question pool
 
 The supplied `Test Questions/2025 ACF Winter` set has a combined CSV at
@@ -92,6 +94,10 @@ count rule with a list of categories, exact tossup/bonus counts, and an optional
 `distinct_categories: true` requires one tossup and one bonus from those
 categories, with the two questions coming from different categories. The
 category names match the broad question category and include all subcategories.
+For flexible distributions spanning multiple category groups, a grouped count
+rule can set exact overall type counts and describe each group's total, minimum
+per type/category, and distinct-category limits. The Fall final uses this form
+instead of enumerating 48 combinations.
 Loading validates the schema version and rule structure and reports errors
 with the file path.
 
@@ -109,7 +115,7 @@ result = solve_baseline(pool, spec, build_similarity(pool), seed=0)  # or solve_
 - `solve_baseline` is pure Python: a random hard-rule-valid construction, then swap local search. It requires exact selectors in explicit pattern rules.
 - `solve_cpsat` needs `ortools` (`pip install -r requirements-dev.txt`). Hard rules are exact constraints, but only the most similar pairs (`top_pairs`) enter its objective. It defaults to one worker because multi-worker search hung on macOS in testing.
 - `python3 -m utilities.benchmark_solvers` compares them. On the sample pool both are always valid in 1–3 s. The baseline scores 10–13% lower (better) on the full soft score, so it is the default choice.
-- Similarity calibration lives in `calibration/`: `similarity_pairs.json` holds the 60 reviewed pairs (`label` = a player would notice a shared topic; `borderline` = unsure, skipped by default). `python3 -m calibration.evaluate_similarity [--embeddings] [--include-borderline] [--weights TEXT SUB CAT]` compares scorers against them (`--weights` scores your own blend). `calibration.sample_similarity_pairs` draws a fresh sample, and `calibration.review_pairs` exports/imports a markdown review sheet. Rerun the evaluation before changing `SimilarityWeights` defaults.
+- Similarity calibration lives in `calibration/`: `similarity_pairs.json` holds the reviewed Winter pairs (`label` = a player would notice a shared topic; `borderline` = unsure, skipped by default). Fall pairs are kept separately in `similarity_pairs_fall.json` as a held-out check. For Fall, review `similarity_pairs_fall_review.md`, import with `python3 -m calibration.review_pairs import --json calibration/similarity_pairs_fall.json --markdown calibration/similarity_pairs_fall_review.md`, then evaluate using `python3 -m calibration.evaluate_similarity --pool "Test Questions/2025 ACF Fall/Question Pool.csv" --pairs calibration/similarity_pairs_fall.json`. `python3 -m calibration.evaluate_similarity [--embeddings] [--include-borderline] [--weights TEXT SUB CAT]` compares scorers (`--weights` scores your own blend). `calibration.sample_similarity_pairs` draws a fresh sample, and `calibration.review_pairs` exports/imports a markdown review sheet. Rerun the evaluation before changing `SimilarityWeights` defaults.
 
 ## Tests
 

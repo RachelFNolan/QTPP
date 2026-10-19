@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter
 
 from .build_spec import (
+    CategoryGroupCountRule,
     CategoryCountRule,
     CountSelector,
     PacketBuildSpec,
@@ -52,22 +53,73 @@ def check_pool_feasibility(pool: QuestionSet, spec: PacketBuildSpec) -> tuple[st
             )
 
     for rule in spec.allowed_patterns:
-        if not isinstance(rule, CategoryCountRule):
-            continue
-        for question_type, per_packet in (
-            ("tossup", rule.tossup_count),
-            ("bonus", rule.bonus_count),
-        ):
-            needed = per_packet * spec.packet_count
-            have = sum(
-                available(CountSelector(question_type, category))
-                for category in rule.categories
-            )
-            if have < needed:
-                errors.append(
-                    f"{rule.name}: need {needed} {question_type}s across "
-                    f"{', '.join(rule.categories)}, pool has {have}"
+        if isinstance(rule, CategoryCountRule):
+            for question_type, per_packet in (
+                ("tossup", rule.tossup_count),
+                ("bonus", rule.bonus_count),
+            ):
+                needed = per_packet * spec.packet_count
+                have = sum(
+                    available(CountSelector(question_type, category))
+                    for category in rule.categories
                 )
+                if have < needed:
+                    errors.append(
+                        f"{rule.name}: need {needed} {question_type}s across "
+                        f"{', '.join(rule.categories)}, pool has {have}"
+                    )
+        elif isinstance(rule, CategoryGroupCountRule):
+            for question_type, per_packet in (
+                ("tossup", rule.tossup_count),
+                ("bonus", rule.bonus_count),
+            ):
+                needed = per_packet * spec.packet_count
+                have = sum(
+                    available(CountSelector(question_type, category))
+                    for group in rule.groups
+                    for category in group.categories
+                )
+                if have < needed:
+                    errors.append(
+                        f"{rule.name}: need {needed} {question_type}s across its groups, "
+                        f"pool has {have}"
+                    )
+            for group in rule.groups:
+                needed = group.total_count * spec.packet_count
+                have = sum(
+                    available(CountSelector(question_type, category))
+                    for question_type in QUESTION_TYPES
+                    for category in group.categories
+                )
+                if have < needed:
+                    errors.append(
+                        f"{rule.name}: need {needed} questions across "
+                        f"{', '.join(group.categories)}, pool has {have}"
+                    )
+                for category in group.categories:
+                    category_needed = (
+                        group.minimum_per_category * spec.packet_count
+                    )
+                    category_have = sum(
+                        available(CountSelector(question_type, category))
+                        for question_type in QUESTION_TYPES
+                    )
+                    if category_have < category_needed:
+                        errors.append(
+                            f"{rule.name}: need {category_needed} questions from "
+                            f"{category}, pool has {category_have}"
+                        )
+                type_needed = group.minimum_per_type * spec.packet_count
+                for question_type in QUESTION_TYPES:
+                    type_have = sum(
+                        available(CountSelector(question_type, category))
+                        for category in group.categories
+                    )
+                    if type_have < type_needed:
+                        errors.append(
+                            f"{rule.name}: need {type_needed} {question_type}s across "
+                            f"{', '.join(group.categories)}, pool has {type_have}"
+                        )
     return tuple(errors)
 
 

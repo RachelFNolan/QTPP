@@ -5,6 +5,7 @@ from pathlib import Path
 from packetizer import (
     AggregateQuota,
     AllowedCountPatterns,
+    CategoryGroupCountRule,
     CategoryCountRule,
     CategoryQuota,
     CountSelector,
@@ -130,13 +131,21 @@ class PacketBuildSpecTests(unittest.TestCase):
         template = acf_fall_final_template()
         self.assertEqual((template.tossup_capacity, template.bonus_capacity), (20, 20))
         rule = template.allowed_patterns[0]
-        self.assertEqual(len(rule.patterns), 48)
-        self.assertTrue(
-            all(
-                sum(pattern[0::2]) == 3 and sum(pattern[1::2]) == 3
-                for pattern in rule.patterns
-            )
+        self.assertIsInstance(rule, CategoryGroupCountRule)
+        self.assertEqual((rule.tossup_count, rule.bonus_count), (3, 3))
+        self.assertEqual(len(rule.groups), 2)
+        self.assertEqual(rule.groups[0].categories, ("Social Science", "Philosophy"))
+        self.assertEqual(rule.groups[0].total_count, 3)
+        self.assertEqual(rule.groups[0].minimum_per_type, 1)
+        self.assertEqual(rule.groups[0].minimum_per_category, 1)
+        self.assertEqual(rule.groups[0].maximum_per_category_per_type, 1)
+        self.assertEqual(
+            rule.groups[1].categories,
+            ("Geography", "Current Events", "Pop Culture", "Other Academic"),
         )
+        self.assertEqual(rule.groups[1].total_count, 3)
+        self.assertEqual(rule.groups[1].minimum_per_type, 1)
+        self.assertTrue(rule.groups[1].distinct_categories)
         self.assertEqual(
             validate_distribution(
                 template.create_spec(packet_count=1),
@@ -145,6 +154,18 @@ class PacketBuildSpecTests(unittest.TestCase):
             ),
             (),
         )
+
+    def test_fall_flexible_rule_rejects_repeated_social_science_type(self) -> None:
+        template = acf_fall_final_template()
+        counts = _first_valid_counts(template)
+        counts[CountSelector("tossup", "Social Science", "Social Science")] += 1
+        counts[CountSelector("tossup", "Philosophy", "Philosophy")] -= 1
+        errors = validate_distribution(
+            template.create_spec(packet_count=1),
+            (counts,),
+            {"tossup": 0, "bonus": 0},
+        )
+        self.assertTrue(any("at most 1 tossup from Social Science" in e for e in errors))
 
     def test_template_rules_are_independently_editable(self) -> None:
         template = acf_winter_final_template()
@@ -197,7 +218,7 @@ def _first_valid_counts(template):
     for rule in template.allowed_patterns:
         if isinstance(rule, AllowedCountPatterns):
             counts.update(zip(rule.selectors, rule.patterns[0]))
-        else:
+        elif isinstance(rule, CategoryCountRule):
             counts[CountSelector("tossup", rule.categories[0], rule.categories[0])] = (
                 rule.tossup_count
             )
@@ -207,6 +228,16 @@ def _first_valid_counts(template):
             counts[CountSelector("bonus", bonus_category, bonus_category)] = (
                 rule.bonus_count
             )
+        elif isinstance(rule, CategoryGroupCountRule):
+            for group in rule.groups:
+                if group.categories == ("Social Science", "Philosophy"):
+                    counts[CountSelector("tossup", "Social Science", "Social Science")] = 1
+                    counts[CountSelector("tossup", "Philosophy", "Philosophy")] = 1
+                    counts[CountSelector("bonus", "Philosophy", "Philosophy")] = 1
+                else:
+                    counts[CountSelector("tossup", "Geography", "Geography")] = 1
+                    counts[CountSelector("bonus", "Current Events", "Current Events")] = 1
+                    counts[CountSelector("bonus", "Pop Culture", "Pop Culture")] = 1
     return counts
 
 

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from .build_spec import (
     AggregateQuota,
     AllowedCountPatterns,
+    CategoryGroupCountRule,
     CategoryCountRule,
     CategoryQuota,
     LeftoverBound,
@@ -18,7 +19,9 @@ class BuildTemplate:
     tossup_capacity: int
     bonus_capacity: int
     quotas: tuple[CategoryQuota, ...]
-    allowed_patterns: tuple[AllowedCountPatterns | CategoryCountRule, ...]
+    allowed_patterns: tuple[
+        AllowedCountPatterns | CategoryCountRule | CategoryGroupCountRule, ...
+    ]
     leftover_bounds: tuple[LeftoverBound, ...] = (
         LeftoverBound("tossup"),
         LeftoverBound("bonus"),

@@ -22,20 +22,4 @@ dist/
 
 # macOS
 .DS_Store
-Test Questions/2025 ACF Winter/A_Toronto-A_City-St-Georges_Sheffield-A_McMaster-A_Chicago-B.json
-Test Questions/2025 ACF Winter/B_Toronto-B_Imperial-B_Wisconsin-A.json
-Test Questions/2025 ACF Winter/C_1UCLA-B_Maryland-B_UCSD-A.json
-Test Questions/2025 ACF Winter/D_Ottawa-A_Manchester-A_McGill-B_Sheffield-C_Auburn-B_Clemson-B_UMN_A.json
-Test Questions/2025 ACF Winter/E_Oxford-A_George-Washington-A_Brown-B_Edinburgh-A_Michigan-B_Kentucky-A_JHU-A_Rutgers-A_Carleton-University_UCLA-A.json
-Test Questions/2025 ACF Winter/F_Washington-A_Washington-B_Georgia-Tech-A_Imperial-A_Ohio-State-B.json
-Test Questions/2025 ACF Winter/G_ASU-A_Manchester-B_Wisconsin-B_Sheffield-B_Claremont-A_Rutgers-B.json
-Test Questions/2025 ACF Winter/H_Toronto-E_Toronto-F_Vanderbilt-A_Oxford-B.json
-Test Questions/2025 ACF Winter/I_Virginia-Tech-A_Toronto-C_UCLA-D_CWRU-D_UCLA-C_Columbia-A.json
-Test Questions/2025 ACF Winter/J_McGill-A_Alberta_Edinburgh-C _MIT-A_Harvard-B_UNC-B_Nebraska-A_MIT-B.json
-Test Questions/2025 ACF Winter/K_Notre_Dame-B_McGill-C_Southampton_A.json
-Test Questions/2025 ACF Winter/L_Chicago-A_Brown-A_Queen's-A_Cambridge-A_Maryland-A_Toronto-G.json
-Test Questions/2025 ACF Winter/M_Lancaster-A_LSE-A_Swarthmore_Simon-Fraser_Indiana-A_Tennessee-A_Yale-A.json
-Test Questions/2025 ACF Winter/N_NYU-A_WashU-A_Purdue-A_CWRU-A_CWRU-B_Cambridge-B.json
-Test Questions/2025 ACF Winter/O_Editors-1.json
-Test Questions/2025 ACF Winter/P_Editors-2.json
-Test Questions/2025 ACF Winter/Q_TB-Extra.json
+Test Questions/*

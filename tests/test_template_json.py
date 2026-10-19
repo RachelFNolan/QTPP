@@ -16,6 +16,7 @@ from packetizer import (
 
 TEMPLATES = Path(__file__).resolve().parents[1] / "templates"
 WINTER_FINAL = TEMPLATES / "acf-winter-final.json"
+FALL_FINAL = TEMPLATES / "acf-fall-final.json"
 
 
 class TemplateJsonTests(unittest.TestCase):
@@ -39,6 +40,16 @@ class TemplateJsonTests(unittest.TestCase):
         self.assertEqual(other["counts"], {"tossup": 1, "bonus": 1})
         self.assertTrue(other["distinct_categories"])
         json.dumps(data)
+
+    def test_json_serializes_grouped_category_count_rule(self) -> None:
+        data = template_to_dict(load_template(FALL_FINAL))
+        rule = data["allowed_patterns"][0]
+        self.assertEqual(rule["counts"], {"tossup": 3, "bonus": 3})
+        self.assertEqual(len(rule["groups"]), 2)
+        self.assertEqual(rule["groups"][0]["total"], 3)
+        self.assertEqual(rule["groups"][0]["minimum_per_category"], 1)
+        self.assertEqual(rule["groups"][0]["maximum_per_category_per_type"], 1)
+        self.assertTrue(rule["groups"][1]["distinct_categories"])
 
     def test_reads_legacy_explicit_pattern_rules(self) -> None:
         data = {

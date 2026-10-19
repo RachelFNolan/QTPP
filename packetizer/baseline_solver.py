@@ -4,9 +4,11 @@ import random
 import time
 from collections import Counter
 from dataclasses import replace
+from itertools import product
 
 from .build_spec import (
     AllowedCountPatterns,
+    CategoryGroupCountRule,
     CategoryCountRule,
     CountSelector,
     PacketBuildSpec,
@@ -155,6 +157,83 @@ def _sample_profile(
                         return None
                     counts[chosen] += 1
                     used.add(chosen.category)
+        elif isinstance(rule, CategoryGroupCountRule):
+            for group in rule.groups:
+                controlled_categories.update(
+                    (question_type, category)
+                    for question_type in ("tossup", "bonus")
+                    for category in group.categories
+                )
+            tossup_ranges = [
+                range(
+                    group.minimum_per_type,
+                    group.total_count - group.minimum_per_type + 1,
+                )
+                for group in rule.groups
+            ]
+            allocations = [
+                values
+                for values in product(*tossup_ranges)
+                if sum(values) == rule.tossup_count
+            ]
+            if not allocations:
+                return None
+            allocation = rng.choice(allocations)
+            for group, tossup_count in zip(rule.groups, allocation):
+                needed = {
+                    "tossup": tossup_count,
+                    "bonus": group.total_count - tossup_count,
+                }
+                used_categories: set[str] = set()
+                category_counts: Counter[str] = Counter()
+                picked_count = 0
+                for question_type in ("tossup", "bonus"):
+                    for _ in range(needed[question_type]):
+                        missing_categories = {
+                            category
+                            for category in group.categories
+                            if category_counts[category] < group.minimum_per_category
+                        }
+                        missing_category_slots = sum(
+                            max(
+                                0,
+                                group.minimum_per_category - category_counts[category],
+                            )
+                            for category in group.categories
+                        )
+                        slots_left = group.total_count - picked_count
+                        candidates = [
+                            selector
+                            for selector in supply
+                            if selector.question_type == question_type
+                            and selector.category in group.categories
+                            and not (
+                                group.distinct_categories
+                                and selector.category in used_categories
+                            )
+                            and (
+                                group.maximum_per_category_per_type is None
+                                or sum(
+                                    count
+                                    for existing, count in counts.items()
+                                    if existing.question_type == question_type
+                                    and existing.category == selector.category
+                                )
+                                < group.maximum_per_category_per_type
+                            )
+                            and (
+                                slots_left > missing_category_slots
+                                or missing_category_slots == 0
+                                or selector.category in missing_categories
+                            )
+                        ]
+                        chosen = pick(candidates)
+                        if chosen is None:
+                            return None
+                        counts[chosen] += 1
+                        used_categories.add(chosen.category)
+                        category_counts[chosen.category] += 1
+                        picked_count += 1
 
     def current(selector: CountSelector) -> int:
         return sum(count for key, count in counts.items() if selector.matches(key))

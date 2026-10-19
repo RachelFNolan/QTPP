@@ -6,7 +6,9 @@ from typing import Any
 
 from .build_spec import (
     AllowedCountPatterns,
+    CategoryCountGroup,
     CategoryCountRule,
+    CategoryGroupCountRule,
     CategoryQuota,
     CountSelector,
     LeftoverBound,
@@ -133,8 +135,27 @@ def _selector_label(selector: CountSelector) -> str:
 
 
 def _rule_to_dict(
-    rule: AllowedCountPatterns | CategoryCountRule,
+    rule: AllowedCountPatterns | CategoryCountRule | CategoryGroupCountRule,
 ) -> dict[str, Any]:
+    if isinstance(rule, CategoryGroupCountRule):
+        return {
+            "name": rule.name,
+            "counts": {
+                "tossup": rule.tossup_count,
+                "bonus": rule.bonus_count,
+            },
+            "groups": [
+                {
+                    "categories": list(group.categories),
+                    "total": group.total_count,
+                    "minimum_per_type": group.minimum_per_type,
+                    "minimum_per_category": group.minimum_per_category,
+                    "maximum_per_category_per_type": group.maximum_per_category_per_type,
+                    "distinct_categories": group.distinct_categories,
+                }
+                for group in rule.groups
+            ],
+        }
     if isinstance(rule, CategoryCountRule):
         return {
             "name": rule.name,
@@ -161,7 +182,32 @@ def _rule_to_dict(
 
 def _pattern_rule_from_dict(
     data: dict[str, Any],
-) -> AllowedCountPatterns | CategoryCountRule:
+) -> AllowedCountPatterns | CategoryCountRule | CategoryGroupCountRule:
+    if "groups" in data:
+        counts = data["counts"]
+        if not isinstance(counts, dict):
+            raise ValueError(f"{data.get('name', 'category group count rule')}: counts must be an object")
+        groups = data["groups"]
+        if not isinstance(groups, list):
+            raise ValueError(f"{data.get('name', 'category group count rule')}: groups must be an array")
+        return CategoryGroupCountRule(
+            name=data["name"],
+            tossup_count=counts["tossup"],
+            bonus_count=counts["bonus"],
+            groups=tuple(
+                CategoryCountGroup(
+                    categories=tuple(group["categories"]),
+                    total_count=group["total"],
+                    minimum_per_type=group.get("minimum_per_type", 0),
+                    minimum_per_category=group.get("minimum_per_category", 0),
+                    maximum_per_category_per_type=group.get(
+                        "maximum_per_category_per_type"
+                    ),
+                    distinct_categories=group.get("distinct_categories", False),
+                )
+                for group in groups
+            ),
+        )
     if "categories" in data or "counts" in data:
         counts = data["counts"]
         categories = data["categories"]

@@ -106,6 +106,82 @@ class CategoryCountRule:
 
 
 @dataclass(frozen=True, slots=True)
+class CategoryCountGroup:
+    """A per-packet total drawn from one category group."""
+
+    categories: tuple[str, ...]
+    total_count: int
+    minimum_per_type: int = 0
+    minimum_per_category: int = 0
+    maximum_per_category_per_type: int | None = None
+    distinct_categories: bool = False
+
+    def __post_init__(self) -> None:
+        if not self.categories or any(
+            not isinstance(category, str) or not category for category in self.categories
+        ):
+            raise ValueError("category count groups require non-empty categories")
+        if len(set(self.categories)) != len(self.categories):
+            raise ValueError("category count group categories must be unique")
+        if not _nonnegative_int(self.total_count) or self.total_count == 0:
+            raise ValueError("category count group total_count must be a positive integer")
+        if not _nonnegative_int(self.minimum_per_type):
+            raise ValueError("minimum_per_type must be a non-negative integer")
+        if 2 * self.minimum_per_type > self.total_count:
+            raise ValueError("minimum_per_type cannot exceed half of total_count")
+        if not _nonnegative_int(self.minimum_per_category):
+            raise ValueError("minimum_per_category must be a non-negative integer")
+        if len(self.categories) * self.minimum_per_category > self.total_count:
+            raise ValueError("category minimums cannot exceed total_count")
+        if self.maximum_per_category_per_type is not None and (
+            not _nonnegative_int(self.maximum_per_category_per_type)
+            or self.maximum_per_category_per_type == 0
+        ):
+            raise ValueError("maximum_per_category_per_type must be a positive integer or None")
+        if not isinstance(self.distinct_categories, bool):
+            raise ValueError("distinct_categories must be a boolean")
+        if self.distinct_categories and self.minimum_per_category > 1:
+            raise ValueError(
+                "distinct categories cannot satisfy minimum_per_category greater than 1"
+            )
+        if self.distinct_categories and self.total_count > len(self.categories):
+            raise ValueError("distinct category group total cannot exceed its category count")
+
+
+@dataclass(frozen=True, slots=True)
+class CategoryGroupCountRule:
+    """Per-packet type totals plus compact constraints over disjoint category groups."""
+
+    name: str
+    tossup_count: int
+    bonus_count: int
+    groups: tuple[CategoryCountGroup, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.name, str) or not self.name:
+            raise ValueError("category group count rule name must be a non-empty string")
+        if not _nonnegative_int(self.tossup_count) or not _nonnegative_int(
+            self.bonus_count
+        ):
+            raise ValueError("category group count rule counts must be non-negative integers")
+        if not self.groups:
+            raise ValueError("category group count rules require at least one group")
+        if self.tossup_count + self.bonus_count != sum(
+            group.total_count for group in self.groups
+        ):
+            raise ValueError("category group totals must equal the rule's tossup and bonus totals")
+        minimum_tossups = sum(group.minimum_per_type for group in self.groups)
+        maximum_tossups = sum(
+            group.total_count - group.minimum_per_type for group in self.groups
+        )
+        if not minimum_tossups <= self.tossup_count <= maximum_tossups:
+            raise ValueError("tossup_count is incompatible with group minimum_per_type constraints")
+        categories = [category for group in self.groups for category in group.categories]
+        if len(set(categories)) != len(categories):
+            raise ValueError("category group categories must be disjoint")
+
+
+@dataclass(frozen=True, slots=True)
 class LeftoverBound:
     question_type: QuestionType
     minimum: int = 0
@@ -123,7 +199,9 @@ class PacketBuildSpec:
     tossup_capacity: int
     bonus_capacity: int
     quotas: tuple[CategoryQuota, ...] = ()
-    allowed_patterns: tuple[AllowedCountPatterns | CategoryCountRule, ...] = ()
+    allowed_patterns: tuple[
+        AllowedCountPatterns | CategoryCountRule | CategoryGroupCountRule, ...
+    ] = ()
     aggregate_quotas: tuple[AggregateQuota, ...] = ()
     leftover_bounds: tuple[LeftoverBound, ...] = field(
         default_factory=lambda: (
@@ -203,7 +281,7 @@ def validate_distribution(
                     errors.append(
                         f"packet {packet_index}: {rule.name} counts {actual} are not an allowed pattern"
                     )
-            else:
+            elif isinstance(rule, CategoryCountRule):
                 category_counts = {
                     category: {
                         question_type: sum(
@@ -240,6 +318,102 @@ def validate_distribution(
                             else ""
                         )
                     )
+
+            else:
+                rule_errors: list[str] = []
+                for group in rule.groups:
+                    group_counts = {
+                        question_type: sum(
+                            count
+                            for selector, count in counts.items()
+                            if selector.category in group.categories
+                            and selector.question_type == question_type
+                        )
+                        for question_type in QUESTION_TYPES
+                    }
+                    group_total = sum(group_counts.values())
+                    maximum_per_type = group.total_count - group.minimum_per_type
+                    if (
+                        group_total != group.total_count
+                        or group_counts["tossup"] < group.minimum_per_type
+                        or group_counts["bonus"] < group.minimum_per_type
+                        or group_counts["tossup"] > maximum_per_type
+                        or group_counts["bonus"] > maximum_per_type
+                    ):
+                        rule_errors.append(
+                            f"group {group.categories} must contain {group.total_count} "
+                            f"questions with at least {group.minimum_per_type} of each type"
+                        )
+                    for category in group.categories:
+                        category_total = sum(
+                            count
+                            for selector, count in counts.items()
+                            if selector.category == category
+                        )
+                        if category_total < group.minimum_per_category:
+                            rule_errors.append(
+                                f"group {group.categories} requires at least "
+                                f"{group.minimum_per_category} from {category}"
+                            )
+                        if group.maximum_per_category_per_type is not None:
+                            for question_type in QUESTION_TYPES:
+                                category_type_count = sum(
+                                    count
+                                    for selector, count in counts.items()
+                                    if selector.category == category
+                                    and selector.question_type == question_type
+                                )
+                                if (
+                                    category_type_count
+                                    > group.maximum_per_category_per_type
+                                ):
+                                    rule_errors.append(
+                                        f"group {group.categories} allows at most "
+                                        f"{group.maximum_per_category_per_type} "
+                                        f"{question_type} from {category}"
+                                    )
+                    if group.distinct_categories:
+                        for category in group.categories:
+                            category_total = sum(
+                                count
+                                for selector, count in counts.items()
+                                if selector.category == category
+                            )
+                            if category_total > 1:
+                                rule_errors.append(
+                                    f"group {group.categories} requires distinct categories"
+                                )
+                                break
+                group_tossups = sum(
+                    sum(
+                        count
+                        for selector, count in counts.items()
+                        if selector.category in group.categories
+                        and selector.question_type == "tossup"
+                    )
+                    for group in rule.groups
+                )
+                group_bonuses = sum(
+                    sum(
+                        count
+                        for selector, count in counts.items()
+                        if selector.category in group.categories
+                        and selector.question_type == "bonus"
+                    )
+                    for group in rule.groups
+                )
+                if (
+                    group_tossups != rule.tossup_count
+                    or group_bonuses != rule.bonus_count
+                ):
+                    rule_errors.append(
+                        f"rule requires {rule.tossup_count} tossups and "
+                        f"{rule.bonus_count} bonuses across its groups"
+                    )
+                errors.extend(
+                    f"packet {packet_index}: {rule.name}: {error}"
+                    for error in rule_errors
+                )
 
     for quota in spec.aggregate_quotas:
         total = sum(_count_selector(counts, quota.selector) for counts in packets)
