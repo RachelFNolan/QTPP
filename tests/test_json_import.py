@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from packetizer import Bonus, Difficulty, QuestionSet, load_question_set
+from qtpp import Bonus, Difficulty, QuestionSet, load_question_set
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]

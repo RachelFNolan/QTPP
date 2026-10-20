@@ -18,8 +18,8 @@ from sklearn.decomposition import TruncatedSVD
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics import average_precision_score, roc_auc_score
 
-from packetizer import SimilarityWeights, TfidfSimilarity, load_question_pool_csv, question_text
-from packetizer.similarity import CombinedSimilarity, question_topics, tokenize
+from qtpp import SimilarityWeights, TfidfSimilarity, load_question_pool_csv, question_text
+from qtpp.similarity import CombinedSimilarity, question_topics, tokenize
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_POOL = ROOT / "Test Questions" / "2025 ACF Winter" / "Question Pool.csv"

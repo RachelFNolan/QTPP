@@ -1,7 +1,7 @@
 import unittest
 from pathlib import Path
 
-from packetizer import (
+from qtpp import (
     check_pool_feasibility,
     load_question_pool_csv,
     load_template,

@@ -1,7 +1,7 @@
 import unittest
 from pathlib import Path
 
-from packetizer import (
+from qtpp import (
     InfeasibleError,
     build_similarity,
     load_question_pool_csv,
@@ -9,8 +9,8 @@ from packetizer import (
     solve_baseline,
     solve_cpsat,
 )
-from packetizer.cpsat_solver import cp_model
-from packetizer.scoring import PacketLayout, SoftWeights, placement_penalty, score_packet
+from qtpp.cpsat_solver import cp_model
+from qtpp.scoring import PacketLayout, SoftWeights, placement_penalty, score_packet
 
 ROOT = Path(__file__).resolve().parents[1]
 POOL = ROOT / "Test Questions" / "2025 ACF Winter" / "Question Pool.csv"

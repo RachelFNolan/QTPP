@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from packetizer import (
+from qtpp import (
     AllowedCountPatterns,
     BuildTemplate,
     CategoryCountRule,

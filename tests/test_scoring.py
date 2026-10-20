@@ -1,6 +1,6 @@
 import unittest
 
-from packetizer.scoring import (
+from qtpp.scoring import (
     CachedScorer,
     PacketLayout,
     SoftWeights,

@@ -1,6 +1,6 @@
-# Packetizer
+# QTPP
 
-Packetizer is being built incrementally to organize quiz bowl tossups and bonuses into packets under ordering and topic constraints. The first increment defines a typed, Python-native model and imports the supplied packet JSON format. It uses only the Python standard library, keeping the domain model usable by later optimization or machine-learning components.
+QTPP is being built incrementally to organize quiz bowl tossups and bonuses into packets under ordering and topic constraints. The first increment defines a typed, Python-native model and imports the supplied packet JSON format. It uses only the Python standard library, keeping the domain model usable by later optimization or machine-learning components.
 
 ## Data model
 
@@ -15,7 +15,7 @@ HTML-style formatting in source text is preserved rather than interpreted or dis
 Question pools can be created before any packets exist:
 
 ```python
-from packetizer import QuestionSet, QuestionSetMetadata
+from qtpp import QuestionSet, QuestionSetMetadata
 
 question_set = QuestionSet(
     metadata=QuestionSetMetadata(id="set-id", name="Example", year=2025, standard=True),
@@ -27,7 +27,7 @@ question_set = QuestionSet(
 ## Importing
 
 ```python
-from packetizer import load_question_set
+from qtpp import load_question_set
 
 question_set = load_question_set("Test Questions/2025 ACF Winter")
 print(question_set.metadata.name)
@@ -58,7 +58,7 @@ needed.
 The CSV can be loaded as an unpacketized pool:
 
 ```python
-from packetizer import load_question_pool_csv
+from qtpp import load_question_pool_csv
 
 question_pool = load_question_pool_csv(
     "Test Questions/2025 ACF Winter/Question Pool.csv"
@@ -107,7 +107,7 @@ See [STEP-2-BENCHMARK.md](./STEP-2-BENCHMARK.md) for the current focused test re
 similarity evaluation across the candidate scorers, and solver benchmark details.
 
 ```python
-from packetizer import *
+from qtpp import *
 pool = load_question_pool_csv("Question Pool.csv")
 spec = load_template("templates/acf-winter-final.json").create_spec(16)
 result = solve_baseline(pool, spec, build_similarity(pool), seed=0)  # or solve_cpsat
@@ -119,13 +119,26 @@ result = solve_baseline(pool, spec, build_similarity(pool), seed=0)  # or solve_
 
 - Suggesting families for untagged questions: supply a labels file (`{"labels": {"Military": "battles, wars, armies", "Diplomatic": "treaties, alliances, negotiations"}}`; a value may also be a list of example phrases) and run `python3 -m utilities.suggest_families suggest --pool "Question Pool.csv" --labels labels.json --output suggestions.json`. Every question with a blank `alternate_subcategory` (and no entry in `--curated`) is compared with each label; restrict it with repeatable `--subcategory "Other History"`. `--backend` is `fastembed` (default), `sentence-transformers` or the dependency-free `tfidf` (weakest); `--model` overrides the model. A label is proposed only if its score reaches `--min-score` and beats the runner-up by `--min-margin`; otherwise it is `null` with a `best_guess`. Suggestions never affect a build: edit the `label` fields, then run `python3 -m utilities.suggest_families approve suggestions.json --output families.json` (entries with an empty label are dropped) and pass the result to `load_curated_families`. Descriptions matter; a bare label name embeds poorly. Pass your own function to `suggest_families(pool, labels, similarity)` to use another classifier.
 
-- Taxonomy-driven suggestions (default): with no `--labels`, `suggest` uses [packetizer/default_taxonomy.json](packetizer/default_taxonomy.json), a per-category list of alternate subcategories (Science: Mathematics, Astrophysics, Earth Science, Engineering, Computer Science; Literature: Drama, Poetry, Long/Short Fiction; History: Military, Political, Social, Economic; Fine Arts: Opera, Instruments, Painting, Architecture, Sculpture, Specific Works, Dance, Film, Jazz, Photography; Social Science: Psychology, Economics, Anthropology, Linguistics, Sociology). Each label has descriptions, `aliases` (existing pool values such as Math or Astronomy map to Mathematics/Astrophysics so they match), and optional `subcategories` limits (Opera only applies to Auditory/Other Fine Arts, Painting to Visual/Other Fine Arts). A category can also be limited to subcategories (Science only applies to Other Science, so Biology is never labeled Mathematics). `Other` and the old catch-alls are never matched. Edit a copy and pass `--taxonomy FILE`; the schema is documented in [packetizer/taxonomy.py](packetizer/taxonomy.py) and is meant for a future GUI to read and write. Every untagged question in a taxonomy category is classified by similarity to the label descriptions; labels that already have at least `--min-examples` (default 5) tagged questions in the pool also get an example-based check, and a disagreement leaves the question unsure. `--auto-margin 0.06` marks proposals whose lead over the runner-up is at least that as status `auto`; the margin predicted accuracy better than the raw score (on hidden-alternate tests of the Winter pool, a margin of 0.06 or more was about 93% right, versus about 59% overall), and `approve --auto-only` accepts only those. Expect roughly 60-85% accuracy by category (Science, Social Science and Fine Arts are strongest; separating Drama and Poetry from fiction, and History's four labels, are weakest), so review the rest.
+- Taxonomy-driven suggestions (default): with no `--labels`, `suggest` uses [qtpp/default_taxonomy.json](qtpp/default_taxonomy.json), a per-category list of alternate subcategories (Science: Mathematics, Astrophysics, Earth Science, Engineering, Computer Science; Literature: Drama, Poetry, Long/Short Fiction; History: Military, Political, Social, Economic; Fine Arts: Opera, Instruments, Painting, Architecture, Sculpture, Specific Works, Dance, Film, Jazz, Photography; Social Science: Psychology, Economics, Anthropology, Linguistics, Sociology). Each label has descriptions, `aliases` (existing pool values such as Math or Astronomy map to Mathematics/Astrophysics so they match), and optional `subcategories` limits (Opera only applies to Auditory/Other Fine Arts, Painting to Visual/Other Fine Arts). A category can also be limited to subcategories (Science only applies to Other Science, so Biology is never labeled Mathematics). `Other` and the old catch-alls are never matched. Edit a copy and pass `--taxonomy FILE`; the schema is documented in [qtpp/taxonomy.py](qtpp/taxonomy.py) and is meant for a future GUI to read and write. Every untagged question in a taxonomy category is classified by similarity to the label descriptions; labels that already have at least `--min-examples` (default 5) tagged questions in the pool also get an example-based check, and a disagreement leaves the question unsure. `--auto-margin 0.06` marks proposals whose lead over the runner-up is at least that as status `auto`; the margin predicted accuracy better than the raw score (on hidden-alternate tests of the Winter pool, a margin of 0.06 or more was about 93% right, versus about 59% overall), and `approve --auto-only` accepts only those. Expect roughly 60-85% accuracy by category (Science, Social Science and Fine Arts are strongest; separating Drama and Poetry from fiction, and History's four labels, are weakest), so review the rest.
 - Using unreviewed suggestions in scoring (opt-in): `build_similarity(pool, family_penalty=0.5, suggested_families=suggested_tags(pool, backend_fn), suggested_penalty=0.25)` penalizes pairs that share a suggested family but no confirmed one, by `suggested_penalty` (default half of `family_penalty`; confirmed families always win). Do not expect much from it: in a hidden-alternate test on Winter and Fall (alternates removed, scored against the real ones, 5-12 seeds), unreviewed suggestions did not measurably reduce same-family pairs at any weight or confidence cutoff, because only about half of the truly tagged questions received a correct tag. Confirmed tags (existing alternates plus reviewed or `--auto-only` approved suggestions, passed as `curated_families`) are what produced the large reductions, so review first and use this only as a stopgap.
 - Era and region spread (opt-in): `python3 -m utilities.suggest_families time-place --pool "Question Pool.csv" --output tags.json` guesses an era (from years and centuries in the text; History and Literature) and a region (from place names; History) and writes them for review; questions with no clear signal get no tag. Then `eras, regions = load_time_place_tags("tags.json")` and `build_similarity(pool, eras=eras, regions=regions, era_penalty=0.1, region_penalty=0.1)` adds a soft penalty to same-category pairs sharing a tag (`era_categories=`/`region_categories=` change the scope). Both penalties default to 0. `family_penalty` merges aliases (Math = Mathematics) using the default taxonomy; pass `family_aliases=` to override or `{}` to disable.
 - `solve_baseline` is pure Python: a random hard-rule-valid construction, then swap local search. It requires exact selectors in explicit pattern rules.
 - `solve_cpsat` needs `ortools` (`pip install -r requirements-dev.txt`). Hard rules are exact constraints, but only the most similar pairs (`top_pairs`) enter its objective. It defaults to one worker because multi-worker search hung on macOS in testing.
 - `python3 -m utilities.benchmark_solvers` compares them. On the sample pool both are always valid in 1–3 s. The baseline scores 10–13% lower (better) on the full soft score, so it is the default choice.
 - Similarity calibration lives in `calibration/`: `similarity_pairs.json` holds the reviewed Winter pairs (`label` = a player would notice a shared topic; `borderline` = unsure, skipped by default). Fall pairs are kept separately in `similarity_pairs_fall.json` as a held-out check. For Fall, review `similarity_pairs_fall_review.md`, import with `python3 -m calibration.review_pairs import --json calibration/similarity_pairs_fall.json --markdown calibration/similarity_pairs_fall_review.md`, then evaluate using `python3 -m calibration.evaluate_similarity --pool "Test Questions/2025 ACF Fall/Question Pool.csv" --pairs calibration/similarity_pairs_fall.json`. `python3 -m calibration.evaluate_similarity [--embeddings] [--include-borderline] [--weights TEXT SUB CAT]` compares scorers (`--weights` scores your own blend). `calibration.sample_similarity_pairs` draws a fresh sample, and `calibration.review_pairs` exports/imports a markdown review sheet. Rerun the evaluation before changing `SimilarityWeights` defaults.
+
+## Generating and exporting packets (Step 3)
+
+```python
+from qtpp import *
+generated = generate_packets(pool, spec, build_similarity(pool), seed=7)  # solver="cpsat" also works
+export_packets(generated.question_set, "out/")      # one JSON file per packet
+print(generated.report)                             # solver, seed, soft-score breakdown, leftover IDs
+```
+
+- `generate_packets` runs a solver and attaches numbered packets to the pool (`build_question_set` does the second half for an existing `SolverResult`). The same inputs and seed reproduce the same draft and byte-identical files. Unassigned questions stay in the pool and are listed in `report.leftover_ids`. Infeasible requests or results with hard-rule errors raise `InfeasibleError`; nothing is exported.
+- `export_packets` writes `NN_<packet-name>.json` files in the schema read by `load_question_set` (raw and sanitized text, bonus part arrays, topics, difficulty). Unknown set metadata is written as `null`. Empty packets are rejected, and no file is written if any packet is invalid.
+- Printable output (planned PDF/DOCX) is built from `build_packet_document(question_set, packet, FieldSelection(...), authors)`. `FieldSelection` (JSON-serializable via `to_dict`/`from_dict`, for GUI presets) chooses raw or sanitized text, answers, bonus values/modifiers, category/subcategory, alternate subcategory, difficulty, source question ID, author, and which front matter (set name, packet name, authors) appears. Text comes back as styled `Run`s (bold/underline/italic, from `<b>`, `<u>`, `<i>`), so writers need not parse HTML. Source data has no author field: pass `authors={question_id: name}` (or `load_authors("authors.json")` with `{"authors": {...}}`). No PDF/DOCX writer exists yet.
 
 ## Tests
 

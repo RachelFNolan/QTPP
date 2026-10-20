@@ -2,8 +2,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from packetizer import QuestionMetadata, QuestionSet, QuestionSetMetadata, Topic, Tossup
-from packetizer.family_suggest import (
+from qtpp import QuestionMetadata, QuestionSet, QuestionSetMetadata, Topic, Tossup
+from qtpp.family_suggest import (
     approve_suggestions,
     get_backend,
     load_labels,

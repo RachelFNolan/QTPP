@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from packetizer import (
+from qtpp import (
     QuestionMetadata,
     QuestionSet,
     QuestionSetMetadata,
@@ -16,9 +16,9 @@ from packetizer import (
     load_time_place_tags,
     question_families,
 )
-from packetizer.family_suggest import approve_suggestions, save_suggestions, suggest_with_taxonomy
-from packetizer.taxonomy import taxonomy_from_dict
-from packetizer.time_place import detect_era, detect_region, save_time_place_tags
+from qtpp.family_suggest import approve_suggestions, save_suggestions, suggest_with_taxonomy
+from qtpp.taxonomy import taxonomy_from_dict
+from qtpp.time_place import detect_era, detect_region, save_time_place_tags
 
 TAXONOMY = taxonomy_from_dict(
     {

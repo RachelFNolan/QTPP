@@ -18,12 +18,12 @@ import re
 from collections import Counter
 from pathlib import Path
 
-from packetizer import (
+from qtpp import (
     TfidfSimilarity,
     load_question_pool_csv,
     question_text,
 )
-from packetizer.similarity import primary_answer
+from qtpp.similarity import primary_answer
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_POOL = ROOT / "Test Questions" / "2025 ACF Winter" / "Question Pool.csv"

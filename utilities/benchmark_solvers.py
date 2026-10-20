@@ -12,7 +12,7 @@ import argparse
 from pathlib import Path
 from statistics import mean
 
-from packetizer import (
+from qtpp import (
     InfeasibleError,
     build_similarity,
     load_question_pool_csv,

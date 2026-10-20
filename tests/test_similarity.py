@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from packetizer import (
+from qtpp import (
     FamilyPenaltyScorer,
     QuestionMetadata,
     SimilarityWeights,
@@ -14,7 +14,7 @@ from packetizer import (
     load_question_pool_csv,
     question_families,
 )
-from packetizer.similarity import CombinedSimilarity, primary_answer
+from qtpp.similarity import CombinedSimilarity, primary_answer
 
 POOL = Path(__file__).resolve().parents[1] / "Test Questions" / "2025 ACF Winter" / "Question Pool.csv"
 

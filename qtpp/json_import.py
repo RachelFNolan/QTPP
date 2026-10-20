@@ -186,8 +186,8 @@ def _parse_packet_metadata(value: dict[str, Any], path: Path) -> tuple[str, str,
 
 def _parse_set_metadata(value: dict[str, Any], path: Path) -> QuestionSetMetadata:
     standard = value.get("standard")
-    if not isinstance(standard, bool):
-        raise ValueError(f"{path}: set.standard must be a boolean")
+    if standard is not None and not isinstance(standard, bool):
+        raise ValueError(f"{path}: set.standard must be a boolean or null")
     difficulty = _parse_difficulty(value.get("difficulty"), f"{path}: set.difficulty")
     return QuestionSetMetadata(
         id=_string(value.get("_id"), f"{path}: set._id"),

@@ -5,19 +5,19 @@ Build a tool that imports the existing combined Question Pool CSV, assigns quest
 **Steps**
 
 1. **Define input and packet rules.** Add a CSV importer that handles the repository's UTF-8-BOM CSV and bonus-parts JSON, preserving IDs, raw/sanitized text, topic fields, difficulty, and set metadata. Define a build specification for packet count, exact tossup/bonus capacities, hard per-packet category min/max counts, and permitted leftovers. Interpret the example History rule as four History tossups per packet with one each from American, European, World, and Other History; make quota entries configurable rather than hard-coding that example. Fail clearly when hard requirements cannot be satisfied.
-2. **Prototype similarity and select the solver.** Start with normalized category/subcategory matching plus local text-derived similarity; create a small reviewable set of question pairs to tune and assess the score. Treat no two History tossups in a row, related questions in one packet, and related questions near one another as weighted penalties, not validity failures. Benchmark a lightweight Python search against OR-Tools CP-SAT on representative packet data, comparing hard-rule correctness, soft-score quality, runtime, and setup cost. Choose the solver after the benchmark; do not silently relax hard constraints.
-3. **Implement generation and JSON export.** Generate ordered packet placements while keeping overflow questions unassigned in the pool. Export one JSON file per packet using the current schema, preserving question text/answers and bonus part structure. Add deterministic seeds or equivalent repeatability so a generated draft can be reproduced. Surface infeasible hard rules and remaining soft-rule penalties in the result.
+2. **Prototype similarity and select the solver — DONE.** Implemented and evaluated local text/topic similarity, soft penalties, and both solver backends; benchmark results and the baseline solver decision are recorded in [STEP-2-BENCHMARK.md](./STEP-2-BENCHMARK.md). The full test suite passes (64 tests); the solver and similarity benchmark outcomes and limitations are documented in the report.
+3. **Implement generation and JSON export — DONE.** Implemented in `generation.py`, `json_export.py`, and `document.py` (field-selectable, render-ready packet documents for the future PDF/DOCX export); see README. Original scope: generate ordered packet placements while keeping overflow questions unassigned in the pool. Export one JSON file per packet using the current schema, preserving question text/answers and bonus part structure. Add deterministic seeds or equivalent repeatability so a generated draft can be reproduced. Surface infeasible hard rules and remaining soft-rule penalties in the result.
 4. **Choose and build the interaction surface.** Keep the engine independent of the UI. Use a small CLI harness for repeatable generation and benchmarking; then choose the user-facing surface after the engine prototype. Recommended direction: a local browser app with CSV import, packet/constraint settings, generate, inspect/edit placements, and JSON export, because topic-similarity tuning benefits from reviewing and adjusting drafts. Preserve CLI as a useful batch interface if the browser app is selected.
 5. **Document the workflow and limits.** Update the README with CSV input requirements, constraint semantics, solver choice, similarity tuning workflow, and export behavior. Treat DOCX/PDF export as a later increment; JSON is the v1 output.
 
 **Relevant files**
-- `/Users/rachelnolan/Coding/PacketizerV2/packetizer/model.py` — reuse `QuestionSet`, `Packet`, `QuestionPlacement`, `Topic`, and `Difficulty`; extend only if generation results need a domain representation not already covered.
-- `/Users/rachelnolan/Coding/PacketizerV2/packetizer/json_import.py` — existing packet JSON conventions and validation behavior to preserve.
-- `/Users/rachelnolan/Coding/PacketizerV2/utilities/generate_question_pool.py` — source of truth for current CSV columns and bonus serialization.
-- `/Users/rachelnolan/Coding/PacketizerV2/Test Questions/2025 ACF Winter/Question Pool.csv` — representative real input and benchmark data.
-- Add focused modules under `/Users/rachelnolan/Coding/PacketizerV2/packetizer/` for CSV import, build constraints/scoring, generation, and packet JSON export, following the existing package style.
-- Add focused tests under `/Users/rachelnolan/Coding/PacketizerV2/tests/`; retain `/Users/rachelnolan/Coding/PacketizerV2/tests/test_json_import.py` as the JSON compatibility reference.
-- `/Users/rachelnolan/Coding/PacketizerV2/README.md` — document the user workflow and supported constraints.
+- `/Users/rachelnolan/Coding/QTPP/qtpp/model.py` — reuse `QuestionSet`, `Packet`, `QuestionPlacement`, `Topic`, and `Difficulty`; extend only if generation results need a domain representation not already covered.
+- `/Users/rachelnolan/Coding/QTPP/qtpp/json_import.py` — existing packet JSON conventions and validation behavior to preserve.
+- `/Users/rachelnolan/Coding/QTPP/utilities/generate_question_pool.py` — source of truth for current CSV columns and bonus serialization.
+- `/Users/rachelnolan/Coding/QTPP/Test Questions/2025 ACF Winter/Question Pool.csv` — representative real input and benchmark data.
+- Add focused modules under `/Users/rachelnolan/Coding/QTPP/qtpp/` for CSV import, build constraints/scoring, generation, and packet JSON export, following the existing package style.
+- Add focused tests under `/Users/rachelnolan/Coding/QTPP/tests/`; retain `/Users/rachelnolan/Coding/QTPP/tests/test_json_import.py` as the JSON compatibility reference.
+- `/Users/rachelnolan/Coding/QTPP/README.md` — document the user workflow and supported constraints.
 
 **Verification**
 1. Unit-test CSV parsing for BOM headers, both question types, bonus parts, metadata, and malformed/misaligned rows.
@@ -25,7 +25,7 @@ Build a tool that imports the existing combined Question Pool CSV, assigns quest
 3. Test soft scoring for adjacent History tossups and topic/text-similar pairs; use a small labeled set of pairs to tune weights and compare rankings.
 4. Benchmark candidate solvers using the checked-in pool; record validity, score, runtime, and dependency/setup cost before selecting one.
 5. Round-trip generated packets through the existing `load_question_set` importer and inspect the resulting per-packet JSON.
-6. Run `python3 -m unittest discover -s tests`; once a UI is selected, manually exercise CSV import through JSON download with the sample pool.
+6. Run `python3 -m unittest discover -s tests` (passed: 64 tests on 2026-10-20); once a UI is selected, manually exercise CSV import through JSON download with the sample pool.
 
 **Decisions**
 - Input: combined Question Pool CSV.

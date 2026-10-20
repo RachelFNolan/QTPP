@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from packetizer import Bonus, Difficulty, load_question_pool_csv
+from qtpp import Bonus, Difficulty, load_question_pool_csv
 from utilities.generate_question_pool import generate_question_pool
 
 

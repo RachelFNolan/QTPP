@@ -15,6 +15,21 @@ from .feasibility import check_pool_feasibility, max_feasible_packets, pool_coun
 from .baseline_solver import solve_baseline
 from .cpsat_solver import solve_cpsat
 from .json_import import load_question_set
+from .generation import GeneratedPackets, GenerationReport, build_question_set, generate_packets
+from .json_export import export_packets, packet_filename, packet_to_dict
+from .document import (
+    DocBonus,
+    DocBonusPart,
+    DocTossup,
+    FieldSelection,
+    FrontMatter,
+    PacketDocument,
+    Run,
+    build_packet_document,
+    load_authors,
+    parse_markup,
+    plain_text,
+)
 from .scoring import PacketLayout, SoftScore, SoftWeights, score_layouts
 from .solving import InfeasibleError, SolverResult, validate_layouts
 from .similarity import (
@@ -55,6 +70,24 @@ from .time_place import (
 from .templates import BuildTemplate
 
 __all__ = [
+    "GeneratedPackets",
+    "GenerationReport",
+    "build_question_set",
+    "generate_packets",
+    "export_packets",
+    "packet_filename",
+    "packet_to_dict",
+    "DocBonus",
+    "DocBonusPart",
+    "DocTossup",
+    "FieldSelection",
+    "FrontMatter",
+    "PacketDocument",
+    "Run",
+    "build_packet_document",
+    "load_authors",
+    "parse_markup",
+    "plain_text",
     "Taxonomy",
     "approve_suggestions",
     "detect_eras",

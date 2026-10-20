@@ -2,7 +2,7 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
-from packetizer import (
+from qtpp import (
     AggregateQuota,
     AllowedCountPatterns,
     CategoryGroupCountRule,
@@ -13,7 +13,7 @@ from packetizer import (
     PacketBuildSpec,
     validate_distribution,
 )
-from packetizer import load_template
+from qtpp import load_template
 
 TEMPLATES = Path(__file__).resolve().parents[1] / "templates"
 

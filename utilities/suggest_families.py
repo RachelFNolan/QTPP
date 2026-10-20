@@ -13,8 +13,8 @@ usable with load_curated_families (--auto-only keeps just status "auto" entries)
 Era and region tags for History/Literature spread penalties (review before use):
     python3 -m utilities.suggest_families time-place --pool CSV --output tags.json
 
---taxonomy defaults to packetizer/default_taxonomy.json (per-category labels with
-descriptions and aliases; the schema is documented in packetizer/taxonomy.py).
+--taxonomy defaults to qtpp/default_taxonomy.json (per-category labels with
+descriptions and aliases; the schema is documented in qtpp/taxonomy.py).
 
 labels.json: {"labels": {"Military": "battles, wars, armies, campaigns", ...}}
 A label value may also be a list of example phrases.
@@ -26,10 +26,10 @@ import argparse
 import json
 from pathlib import Path
 
-from packetizer import load_curated_families, load_question_pool_csv
-from packetizer.taxonomy import DEFAULT_TAXONOMY, load_taxonomy
-from packetizer.time_place import detect_eras, detect_regions, save_time_place_tags
-from packetizer.family_suggest import (
+from qtpp import load_curated_families, load_question_pool_csv
+from qtpp.taxonomy import DEFAULT_TAXONOMY, load_taxonomy
+from qtpp.time_place import detect_eras, detect_regions, save_time_place_tags
+from qtpp.family_suggest import (
     approve_suggestions,
     get_backend,
     load_labels,
