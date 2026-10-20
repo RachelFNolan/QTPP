@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>QTPP Packet Workshop</title>
+  <link rel="stylesheet" href="/app.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="/" aria-label="QTPP home">
+        <span class="brand-mark">Q</span>
+        <span><strong>QTPP</strong><small>Packet workshop</small></span>
+      </a>
+      <div class="local-note"><span class="status-dot"></span> Local workspace</div>
+      <nav aria-label="Workspace">
+        <button class="nav-item active" data-view="import"><span>01</span> Import</button>
+        <button class="nav-item" data-view="configure"><span>02</span> Configure</button>
+        <button class="nav-item" data-view="compare"><span>03</span> Compare</button>
+        <button class="nav-item" data-view="review"><span>04</span> Review</button>
+        <button class="nav-item" data-view="audit"><span>05</span> Audit</button>
+        <button class="nav-item" data-view="export"><span>06</span> Export</button>
+      </nav>
+      <div class="sidebar-footer">
+        <p>Question pools and drafts stay in this local session.</p>
+        <a href="/README.md" target="_blank" rel="noreferrer">Project guide ↗</a>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">QUESTION POOL TO PACKETS</p>
+          <h1 id="page-title">Import a question pool</h1>
+        </div>
+        <div class="topbar-right">
+          <span id="pool-pill" class="pill muted">No pool loaded</span>
+          <span class="privacy-label">Runs on this computer</span>
+        </div>
+      </header>
+      <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+      <div id="demo-guide" class="demo-guide" hidden></div>
+
+      <section class="view active" id="view-import">
+        <div class="hero-grid">
+          <article class="hero-card">
+            <p class="eyebrow">START HERE</p>
+            <h2>Turn a question pool into a reviewable draft.</h2>
+            <p>Import the combined Question Pool CSV, choose a distribution template, compare builds, then inspect and export packet JSON.</p>
+            <div class="actions">
+              <label class="button primary file-button" for="csv-file">Choose CSV</label>
+              <input id="csv-file" type="file" accept=".csv,text/csv">
+              <button id="import-csv" class="button secondary" disabled>Import selected file</button>
+            </div>
+            <button id="load-demo" class="text-button">Try the guided sample workflow <span aria-hidden="true">→</span></button>
+          </article>
+          <article class="card info-card">
+            <div class="card-icon">i</div>
+            <h3>Local by design</h3>
+            <p>The workspace binds to this computer only. CSV contents are held in memory for this session and are not uploaded to a service.</p>
+            <div class="mini-rule"></div>
+            <p class="small">The sample workflow uses the repository's 2025 ACF Winter pool.</p>
+          </article>
+        </div>
+        <article id="pool-summary" class="card pool-card" hidden></article>
+      </section>
+
+      <section class="view" id="view-configure">
+        <div class="section-heading">
+          <div><p class="eyebrow">BUILD RULES</p><h2>Configure packets</h2></div>
+          <button id="new-template" class="button secondary">Create from scratch</button>
+        </div>
+        <div class="configure-grid">
+          <article class="card">
+            <div class="field-row">
+              <label for="template-select">Ready-to-use template</label>
+              <select id="template-select"></select>
+            </div>
+            <div class="field-row">
+              <label for="template-name">Template name</label>
+              <input id="template-name" type="text">
+            </div>
+            <div class="field-grid two">
+              <div class="field-row"><label for="tossup-capacity">Tossups per packet</label><input id="tossup-capacity" type="number" min="0"></div>
+              <div class="field-row"><label for="bonus-capacity">Bonuses per packet</label><input id="bonus-capacity" type="number" min="0"></div>
+            </div>
+            <div class="subheading-row">
+              <div><h3>Category and subcategory quotas</h3><p>Minimum and optional maximum counts in each packet.</p></div>
+              <button id="add-quota" class="button small secondary">Add quota</button>
+            </div>
+            <div id="quota-list" class="quota-list"></div>
+            <datalist id="category-options"></datalist>
+            <datalist id="subcategory-options"></datalist>
+            <div class="subheading-row advanced-title">
+              <div><h3>Allowed distribution patterns</h3><p>Build common category rules here; advanced shapes remain editable as JSON.</p></div>
+            </div>
+            <div class="pattern-builder">
+              <input id="pattern-name" type="text" placeholder="Rule name">
+              <input id="pattern-categories" type="text" placeholder="Categories, comma separated">
+              <input id="pattern-tossups" type="number" min="0" value="0" aria-label="Required tossups across selected categories">
+              <input id="pattern-bonuses" type="number" min="0" value="0" aria-label="Required bonuses across selected categories">
+              <label class="compact-check"><input id="pattern-distinct" type="checkbox"> Distinct categories</label>
+              <button id="add-category-pattern" class="button small secondary">Add category rule</button>
+            </div>
+            <textarea id="patterns-json" class="code-input" rows="9" spellcheck="false" aria-label="Allowed count patterns JSON"></textarea>
+            <div class="field-grid two leftover-grid">
+              <div class="field-row"><label for="leftover-tu">Allowed leftover tossups (max)</label><input id="leftover-tu" type="number" min="0"></div>
+              <div class="field-row"><label for="leftover-bonus">Allowed leftover bonuses (max)</label><input id="leftover-bonus" type="number" min="0"></div>
+            </div>
+            <div class="actions">
+              <button id="save-template" class="button secondary">Download template JSON</button>
+              <label class="button secondary file-button" for="template-file">Import template JSON</label>
+              <input id="template-file" type="file" accept=".json,application/json">
+            </div>
+          </article>
+          <aside class="card side-card">
+            <p class="eyebrow">BUILD SIZE</p>
+            <div class="field-row"><label for="packet-count">Number of packets</label><input id="packet-count" type="number" value="1" min="1"></div>
+            <div class="field-row"><label for="seed">Repeatable seed</label><input id="seed" type="number" value="0"></div>
+            <div id="config-pool-hint" class="hint-box">Import a pool to see its category and subcategory values.</div>
+            <p class="small muted-text">Hard constraints are validated before export. Leftover questions remain unassigned in the pool.</p>
+            <button class="button primary full" data-go="compare">Continue to compare <span aria-hidden="true">→</span></button>
+          </aside>
+        </div>
+      </section>
+
+      <section class="view" id="view-compare">
+        <div class="section-heading">
+          <div><p class="eyebrow">GENERATION OPTIONS</p><h2>Compare build approaches</h2></div>
+          <button id="run-build" class="button primary">Run selected builds</button>
+        </div>
+        <div class="compare-grid">
+          <article class="card">
+            <h3>Solvers</h3>
+            <p class="muted-text">Choose one for a single run, or several for a side-by-side comparison.</p>
+            <div id="solver-options" class="choice-list"></div>
+          </article>
+          <article class="card">
+            <h3>Similarity scorers</h3>
+            <p class="muted-text">Scorers influence soft similarity penalties; hard distribution rules are unchanged.</p>
+            <div id="similarity-options" class="choice-list"></div>
+          </article>
+        </div>
+        <article class="card weight-card">
+          <div class="subheading-row">
+            <div><h3>Soft scoring weights</h3><p>These affect ordering preference only; hard template rules are unchanged.</p></div>
+          </div>
+          <div class="field-grid four">
+            <div class="field-row"><label for="weight-adjacent">Adjacent category</label><input id="weight-adjacent" type="number" min="0" step="0.1" value="1"></div>
+            <div class="field-row"><label for="weight-packet">Same-packet similarity</label><input id="weight-packet" type="number" min="0" step="0.1" value="1"></div>
+            <div class="field-row"><label for="weight-nearby">Nearby similarity</label><input id="weight-nearby" type="number" min="0" step="0.1" value="3"></div>
+            <div class="field-row"><label for="weight-window">Nearby window</label><input id="weight-window" type="number" min="1" step="1" value="3"></div>
+          </div>
+        </article>
+        <div id="comparison-results" class="results-grid"></div>
+      </section>
+
+      <section class="view" id="view-review">
+        <div class="section-heading">
+          <div><p class="eyebrow">DRAFT PACKETS</p><h2>Review and arrange</h2></div>
+          <button id="apply-review" class="button primary">Recalculate and validate</button>
+        </div>
+        <div id="review-summary"></div>
+        <div id="packet-list" class="packet-list"></div>
+      </section>
+
+      <section class="view" id="view-audit">
+        <div class="section-heading">
+          <div><p class="eyebrow">EVIDENCE BEFORE EXPORT</p><h2>Audit this draft</h2></div>
+        </div>
+        <article class="card audit-prompt-card">
+          <label for="audit-request">Ask a question about packet composition</label>
+          <div class="audit-input-row">
+            <input id="audit-request" type="text" value="This proposed packet contains too much 20th century material. Investigate that">
+            <button id="run-audit" class="button primary">Investigate</button>
+          </div>
+          <p class="small muted-text">Requests are interpreted locally from available categories and text-derived dates. Findings are comparative, not automatic hard rules.</p>
+        </article>
+        <div id="audit-results"></div>
+      </section>
+
+      <section class="view" id="view-export">
+        <div class="section-heading">
+          <div><p class="eyebrow">FINAL OUTPUT</p><h2>Export packet JSON</h2></div>
+          <button id="export-packets" class="button primary">Download packet files</button>
+        </div>
+        <div id="export-summary" class="card export-summary">
+          <h3>Existing packet JSON format</h3>
+          <p>Each packet is downloaded as an individual JSON file. Export is blocked only when a hard rule is invalid or a packet is empty.</p>
+          <p class="small muted-text">User-created templates are portable JSON files. Drafts remain in this browser session and can be exported again while the workspace is open.</p>
+        </div>
+      </section>
+
+      <footer class="app-footer"><span>QTPP local packet workspace</span><span>CSV in · reviewed JSON out</span></footer>
+    </main>
+  </div>
+</body>
+</html>

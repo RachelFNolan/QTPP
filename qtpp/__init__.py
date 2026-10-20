@@ -63,6 +63,7 @@ from .template_json import (
 from .family_suggest import approve_suggestions, suggest_families, suggest_with_taxonomy, suggested_tags
 from .taxonomy import Taxonomy, load_taxonomy
 from .time_place import (
+    detect_century,
     detect_eras,
     detect_regions,
     load_time_place_tags,
@@ -91,6 +92,7 @@ __all__ = [
     "Taxonomy",
     "approve_suggestions",
     "detect_eras",
+    "detect_century",
     "detect_regions",
     "load_taxonomy",
     "load_time_place_tags",

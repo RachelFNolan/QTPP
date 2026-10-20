@@ -140,6 +140,26 @@ print(generated.report)                             # solver, seed, soft-score b
 - `export_packets` writes `NN_<packet-name>.json` files in the schema read by `load_question_set` (raw and sanitized text, bonus part arrays, topics, difficulty). Unknown set metadata is written as `null`. Empty packets are rejected, and no file is written if any packet is invalid.
 - Printable output (planned PDF/DOCX) is built from `build_packet_document(question_set, packet, FieldSelection(...), authors)`. `FieldSelection` (JSON-serializable via `to_dict`/`from_dict`, for GUI presets) chooses raw or sanitized text, answers, bonus values/modifiers, category/subcategory, alternate subcategory, difficulty, source question ID, author, and which front matter (set name, packet name, authors) appears. Text comes back as styled `Run`s (bold/underline/italic, from `<b>`, `<u>`, `<i>`), so writers need not parse HTML. Source data has no author field: pass `authors={question_id: name}` (or `load_authors("authors.json")` with `{"authors": {...}}`). No PDF/DOCX writer exists yet.
 
+## Local browser workspace (Step 4)
+
+Run the desktop-first, local-only packet workspace with the Python standard library:
+
+```sh
+python3 -m qtpp.web_app
+```
+
+Open the printed `http://127.0.0.1:8765` address. The app binds to loopback, serves its UI locally, and keeps the imported pool and generated draft in memory for the current session; it does not call a hosted service. Use **Try the guided sample workflow** to load the repository's 2025 ACF Winter CSV and follow the import-to-export path, or select your own combined Question Pool CSV.
+
+The left navigation separates Import, Configure, Compare, Review, Audit, and Export:
+
+- **Configure:** choose one of the checked-in packet templates, edit its per-packet category/subcategory quotas, and add category-count rules in the form. More advanced allowed-pattern rules can be edited in the existing template JSON format. Import and download template JSON to reuse custom distributions in later sessions; template files and packet exports are the persistence mechanism.
+- **Compare:** select the Python baseline and/or the optional OR-Tools CP-SAT solver, and compare balanced TF-IDF/topic, text-only TF-IDF, and topic-only similarity. Multiple selections run with the same pool, template, packet count, and seed. Results show placement, soft-score breakdown, runtime, and leftovers. CP-SAT is offered only when OR-Tools is installed. The similarity choices are local scoring configurations, not learned semantic models.
+- **Review:** inspect packet questions and answers, move questions between packets, and reorder them within a packet. Recalculate after edits to see numbering, hard-rule violations, leftovers, and updated soft scores. Edits are revalidated before audit/export; JSON export is blocked when hard constraints fail or a packet is empty.
+- **Audit:** run a pre-export review of hard-rule status, leftovers, the most similar within-packet question pairs, and adjacent same-category tossups. Free-form local requests currently recognize pool categories and century references such as “too much 20th-century material.” Composition is compared with the overall pool and peer packets; counts, coverage, percentage-point differences, and question IDs are shown rather than imposing a guessed threshold. If a request cannot be interpreted, the app asks for a clearer category or period. Date/century inference is heuristic and should be reviewed. The audit boundary is designed to allow a future AI-backed investigator, but v1 sends no question data to an external model.
+- **Export:** download one JSON file per packet using the existing import-compatible schema. Your browser may ask permission for multiple downloads.
+
+The Python package remains independent of the UI, and the existing CLI/batch workflows continue to work. The app has no project database or plugin system; future audit, scorer, or export capabilities can be added behind the existing engine/application boundaries.
+
 ## Tests
 
 ```sh

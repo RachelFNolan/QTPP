@@ -41,14 +41,28 @@ def era_of(year: int) -> str:
 
 def detect_era(text: str) -> str | None:
     """Era of the median year (or century) mentioned in text, or None."""
+    years = _mentioned_years(text)
+    if not years:
+        return None
+    return era_of(int(statistics.median(years)))
+
+
+def detect_century(text: str) -> int | None:
+    """Century containing the median year (or century) mentioned in text."""
+    years = _mentioned_years(text)
+    if not years:
+        return None
+    year = int(statistics.median(years))
+    return (abs(year) - 1) // 100 + 1
+
+
+def _mentioned_years(text: str) -> list[int]:
     years = [-int(match) for match in _BCE_YEAR.findall(text)]
     for number, bce in _CENTURY.findall(text):
         century = int(number)
         years.append(-century * 100 + 50 if bce else century * 100 - 50)
     years.extend(int(match) for match in _YEAR.findall(text))
-    if not years:
-        return None
-    return era_of(int(statistics.median(years)))
+    return years
 
 
 REGIONS: dict[str, tuple[str, ...]] = {
