@@ -185,6 +185,75 @@ class Workspace:
                 "category_counts": {category: counts[category] for category in sorted(counts)},
             }
 
+    def feasibility(self, template_data: Any, packet_count: Any) -> dict[str, Any]:
+        from dataclasses import replace
+
+        from .build_spec import CountSelector
+        from .feasibility import check_pool_feasibility, max_feasible_packets, pool_counts
+
+        with self._lock:
+            pool = self._require_pool()
+            try:
+                if not isinstance(template_data, dict):
+                    raise ValueError("Select or create a valid packet template.")
+                template = template_from_dict(template_data)
+                count = _positive_integer(packet_count, "packet_count")
+                spec = template.create_spec(count)
+            except (KeyError, TypeError, ValueError) as error:
+                raise WorkspaceError(str(error)) from error
+            counts = pool_counts(pool)
+            rows = []
+            for question_type, capacity in (
+                ("tossup", spec.tossup_capacity),
+                ("bonus", spec.bonus_capacity),
+            ):
+                have = sum(c for key, c in counts.items() if key.question_type == question_type)
+                rows.append(
+                    {"label": f"All {question_type}s", "needed": capacity * count, "available": have}
+                )
+            for quota in spec.quotas:
+                selector: CountSelector = quota.selector
+                have = sum(c for key, c in counts.items() if selector.matches(key))
+                rows.append(
+                    {
+                        "label": " / ".join(
+                            part
+                            for part in (selector.question_type, selector.category, selector.subcategory)
+                            if part
+                        ),
+                        "needed": quota.minimum * count,
+                        "available": have,
+                    }
+                )
+            for row in rows:
+                row["ok"] = row["available"] >= row["needed"]
+            errors = check_pool_feasibility(pool, spec)
+            max_packets = max_feasible_packets(pool, replace(spec, packet_count=1))
+            return {
+                "feasible": not errors,
+                "errors": list(errors),
+                "max_packets": max_packets,
+                "requirements": rows,
+            }
+
+    def suggest_template(self, request: Mapping[str, Any]) -> dict[str, Any]:
+        from .template_wizard import suggest_template
+
+        with self._lock:
+            pool = self._require_pool()
+            try:
+                template = suggest_template(
+                    pool,
+                    name=str(request.get("name") or "Suggested template"),
+                    packet_count=_positive_integer(request.get("packet_count"), "packet_count"),
+                    tossup_capacity=_integer(request.get("tossup_capacity"), "tossup_capacity"),
+                    bonus_capacity=_integer(request.get("bonus_capacity"), "bonus_capacity"),
+                    tolerance=_integer(request.get("tolerance", 1), "tolerance"),
+                )
+            except (TypeError, ValueError) as error:
+                raise WorkspaceError(str(error)) from error
+            return {"template": template_to_dict(template)}
+
     def generate(self, request: Mapping[str, Any]) -> dict[str, Any]:
         with self._lock:
             pool = self._require_pool()

@@ -11,6 +11,7 @@ const state = {
   demo: false,
   demoStage: 0,
   selectedFile: null,
+  patterns: [],
 };
 
 const titles = {
@@ -112,6 +113,10 @@ function poolLoaded(pool) {
   byId("category-options").innerHTML = categories.map((name) => `<option value="${escapeHtml(name)}"></option>`).join("");
   byId("subcategory-options").innerHTML = [...new Set(Object.values(pool.categories).flat())]
     .sort().map((name) => `<option value="${escapeHtml(name)}"></option>`).join("");
+  byId("wizard-run").disabled = false;
+  prefillCategoryRows();
+  renderPatterns();
+  scheduleFeasibility();
   byId("config-pool-hint").innerHTML =
     `<strong>${categories.length} categories available</strong><br>${categories.slice(0, 8).map(escapeHtml).join(" · ")}${categories.length > 8 ? " · …" : ""}`;
 }
@@ -119,10 +124,6 @@ function poolLoaded(pool) {
 function quotaRow(quota = {}) {
   const selector = quota.selector || {};
   return `<div class="quota-row">
-    <select class="quota-type" aria-label="Question type">
-      <option value="tossup" ${selector.question_type === "tossup" ? "selected" : ""}>Tossup</option>
-      <option value="bonus" ${selector.question_type === "bonus" ? "selected" : ""}>Bonus</option>
-    </select>
     <input class="quota-category" list="category-options" value="${escapeHtml(selector.category || "")}" placeholder="Category" aria-label="Category">
     <input class="quota-subcategory" list="subcategory-options" value="${escapeHtml(selector.subcategory || "")}" placeholder="Subcategory (optional)" aria-label="Subcategory">
     <input class="quota-min" type="number" min="0" value="${Number(quota.minimum || 0)}" aria-label="Minimum">
@@ -132,27 +133,29 @@ function quotaRow(quota = {}) {
 }
 
 function currentTemplateFromForm() {
-  const quotas = [...document.querySelectorAll(".quota-row")].map((row, index) => {
-    const category = row.querySelector(".quota-category").value.trim();
-    if (!category) throw new Error(`Quota ${index + 1} needs a category.`);
-    const maximumValue = row.querySelector(".quota-max").value;
-    return {
-      selector: {
-        question_type: row.querySelector(".quota-type").value,
-        category,
-        subcategory: row.querySelector(".quota-subcategory").value.trim() || null,
-      },
-      minimum: Number(row.querySelector(".quota-min").value || 0),
-      maximum: maximumValue === "" ? null : Number(maximumValue),
-    };
+  const quotas = ["tossup", "bonus"].flatMap((type) =>
+    [...document.querySelectorAll(`#${type}-quota-list .quota-row`)].map((row, index) => {
+      const category = row.querySelector(".quota-category").value.trim();
+      if (!category) throw new Error(`${type === "tossup" ? "Tossup" : "Bonus"} quota ${index + 1} needs a category.`);
+      const maximumValue = row.querySelector(".quota-max").value;
+      return {
+        selector: {
+          question_type: type,
+          category,
+          subcategory: row.querySelector(".quota-subcategory").value.trim() || null,
+        },
+        minimum: Number(row.querySelector(".quota-min").value || 0),
+        maximum: maximumValue === "" ? null : Number(maximumValue),
+      };
+    })
+  );
+  const patterns = state.patterns.map((rule, index) => {
+    if (isSimpleRule(rule)) {
+      const problem = simpleRuleProblem(rule);
+      if (problem) throw new Error(`Distribution pattern ${index + 1}: ${problem}`);
+    }
+    return rule;
   });
-  let patterns;
-  try {
-    patterns = JSON.parse(byId("patterns-json").value || "[]");
-  } catch (error) {
-    throw new Error(`Allowed-pattern JSON is invalid: ${error.message}`);
-  }
-  if (!Array.isArray(patterns)) throw new Error("Allowed-pattern rules must be a JSON array.");
   const leftoverBounds = ["tossup", "bonus"].map((type) => ({
     question_type: type,
     minimum: 0,
@@ -177,13 +180,291 @@ function loadTemplateForm(template) {
   byId("template-name").value = template.name || "";
   byId("tossup-capacity").value = template.tossup_capacity ?? 20;
   byId("bonus-capacity").value = template.bonus_capacity ?? 20;
-  byId("quota-list").innerHTML = (template.quotas || []).map(quotaRow).join("");
-  byId("patterns-json").value = JSON.stringify(template.allowed_patterns || [], null, 2);
+  for (const type of ["tossup", "bonus"]) {
+    byId(`${type}-quota-list`).innerHTML = (template.quotas || [])
+      .filter((quota) => quota.selector?.question_type === type)
+      .map(quotaRow)
+      .join("");
+  }
+  setPatterns(structuredClone(template.allowed_patterns || []));
   const leftovers = template.leftover_bounds || [];
   const tu = leftovers.find((item) => item.question_type === "tossup");
   const bonus = leftovers.find((item) => item.question_type === "bonus");
   byId("leftover-tu").value = tu?.maximum ?? "";
   byId("leftover-bonus").value = bonus?.maximum ?? "";
+}
+
+let feasibilityTimer;
+function scheduleFeasibility() {
+  window.clearTimeout(feasibilityTimer);
+  feasibilityTimer = window.setTimeout(updateFeasibility, 350);
+}
+let feasibilitySequence = 0;
+async function updateFeasibility() {
+  const box = byId("feasibility");
+  if (!state.pool) {
+    box.className = "hint-box feasibility";
+    box.textContent = "Import a pool to check feasibility.";
+    return;
+  }
+  const sequence = ++feasibilitySequence;
+  let template;
+  try { template = currentTemplateFromForm(); } catch (error) {
+    box.className = "hint-box feasibility bad";
+    box.textContent = error.message;
+    return;
+  }
+  const packetCount = Number(byId("packet-count").value);
+  if (!Number.isInteger(packetCount) || packetCount < 1) {
+    box.className = "hint-box feasibility bad";
+    box.textContent = "Enter a packet count of 1 or more.";
+    return;
+  }
+  try {
+    const result = await api("/api/feasibility", { template, packet_count: packetCount });
+    if (sequence !== feasibilitySequence) return;
+    const short = result.requirements.filter((row) => !row.ok);
+    const messages = result.errors.length ? result.errors : short.map((row) => `${row.label}: need ${row.needed}, pool has ${row.available}`);
+    box.className = `hint-box feasibility ${result.feasible ? "good" : "bad"}`;
+    box.innerHTML = `<strong>${result.feasible ? "Pool can support this template" : "Pool cannot support this template"}</strong><br>` +
+      `Up to ${result.max_packets} packet${result.max_packets === 1 ? "" : "s"} fit these minimums.` +
+      (result.max_packets > 0 && result.max_packets !== packetCount
+        ? ` <button type="button" class="linklike" id="use-max-packets" data-count="${result.max_packets}">Use ${result.max_packets}</button>` : "") +
+      (messages.length ? `<ul>${messages.slice(0, 8).map((message) => `<li>${escapeHtml(message)}</li>`).join("")}</ul>` : "");
+  } catch (error) {
+    if (sequence !== feasibilitySequence) return;
+    box.className = "hint-box feasibility bad";
+    box.textContent = error.message;
+  }
+}
+
+function catRow(category = {}) {
+  const subs = (category.subs || []).map(subRow).join("");
+  return `<div class="cat-row">
+    <div class="cat-head">
+      <input class="cat-name" list="category-options" value="${escapeHtml(category.name || "")}" placeholder="Category" aria-label="Major category">
+      <input class="cat-tu" type="number" min="0" value="${Number(category.tossups || 0)}" aria-label="Tossups per packet">
+      <input class="cat-bonus" type="number" min="0" value="${Number(category.bonuses || 0)}" aria-label="Bonuses per packet">
+      <button type="button" class="button small secondary cat-add-sub">+ Subcategory</button>
+      <button type="button" class="remove-row cat-remove" aria-label="Remove category">×</button>
+    </div>
+    <div class="cat-subs">${subs}</div>
+    <div class="sub-labels"><span>Subcategory</span><span>TU min</span><span>TU max</span><span>B min</span><span>B max</span><span></span></div>
+    <div class="cat-error" hidden></div>
+  </div>`;
+}
+
+function subRow(sub = {}) {
+  const value = (number) => (number == null ? "" : Number(number));
+  return `<div class="sub-row">
+    <input class="sub-name" list="subcategory-options" value="${escapeHtml(sub.name || "")}" placeholder="Subcategory" aria-label="Subcategory">
+    <input class="sub-tmin" type="number" min="0" value="${value(sub.tmin ?? 0)}" aria-label="Tossup minimum">
+    <input class="sub-tmax" type="number" min="0" value="${value(sub.tmax)}" placeholder="max" aria-label="Tossup maximum">
+    <input class="sub-bmin" type="number" min="0" value="${value(sub.bmin ?? 0)}" aria-label="Bonus minimum">
+    <input class="sub-bmax" type="number" min="0" value="${value(sub.bmax)}" placeholder="max" aria-label="Bonus maximum">
+    <button type="button" class="remove-row sub-remove" aria-label="Remove subcategory">×</button>
+  </div>`;
+}
+
+function readCategoryRows() {
+  return [...document.querySelectorAll(".cat-row")].map((row) => {
+    const optional = (input) => (input.value === "" ? null : Number(input.value));
+    return {
+      element: row,
+      name: row.querySelector(".cat-name").value.trim(),
+      tossups: Number(row.querySelector(".cat-tu").value || 0),
+      bonuses: Number(row.querySelector(".cat-bonus").value || 0),
+      subs: [...row.querySelectorAll(".sub-row")].map((sub) => ({
+        name: sub.querySelector(".sub-name").value.trim(),
+        tmin: Number(sub.querySelector(".sub-tmin").value || 0),
+        tmax: optional(sub.querySelector(".sub-tmax")),
+        bmin: Number(sub.querySelector(".sub-bmin").value || 0),
+        bmax: optional(sub.querySelector(".sub-bmax")),
+      })),
+    };
+  });
+}
+
+function validateCategoryRows(rows) {
+  let valid = rows.length > 0;
+  const seen = new Set();
+  rows.forEach((row) => {
+    const problems = [];
+    if (!row.name) problems.push("Enter a category name.");
+    else if (seen.has(row.name.toLowerCase())) problems.push("This category is listed twice.");
+    seen.add(row.name.toLowerCase());
+    for (const [label, count, minKey, maxKey] of [["Tossup", row.tossups, "tmin", "tmax"], ["Bonus", row.bonuses, "bmin", "bmax"]]) {
+      const minimumTotal = row.subs.reduce((sum, sub) => sum + sub[minKey], 0);
+      if (minimumTotal > count) problems.push(`${label} subcategory minimums (${minimumTotal}) exceed the ${count} per packet for this category.`);
+      row.subs.forEach((sub) => {
+        if (sub[maxKey] != null && sub[maxKey] < sub[minKey]) problems.push(`${label} maximum is below minimum for “${sub.name || "subcategory"}”.`);
+      });
+    }
+    if (row.subs.some((sub) => !sub.name)) problems.push("Every subcategory needs a name.");
+    const names = row.subs.map((sub) => sub.name.toLowerCase());
+    if (new Set(names).size !== names.length) problems.push("A subcategory is listed twice.");
+    const box = row.element.querySelector(".cat-error");
+    box.hidden = problems.length === 0;
+    box.innerHTML = [...new Set(problems)].map(escapeHtml).join("<br>");
+    if (problems.length) valid = false;
+  });
+  return valid;
+}
+
+function updateCategorySummary() {
+  const rows = readCategoryRows();
+  const tossups = rows.reduce((sum, row) => sum + row.tossups, 0);
+  const bonuses = rows.reduce((sum, row) => sum + row.bonuses, 0);
+  byId("cat-summary").textContent = `Totals: ${tossups} tossups and ${bonuses} bonuses per packet.`;
+  byId("cat-apply").disabled = !state.pool || rows.length === 0;
+}
+
+function prefillCategoryRows() {
+  if (!state.pool) return;
+  byId("cat-rows").innerHTML = Object.keys(state.pool.categories).map((name) => catRow({ name })).join("");
+  updateCategorySummary();
+}
+
+function applyCategoryRows() {
+  const rows = readCategoryRows();
+  if (!validateCategoryRows(rows)) {
+    setNotice("Fix the highlighted category rows before applying.", "error");
+    return;
+  }
+  const quotas = [];
+  for (const [type, countKey, minKey, maxKey] of [["tossup", "tossups", "tmin", "tmax"], ["bonus", "bonuses", "bmin", "bmax"]]) {
+    for (const row of rows) {
+      if (row[countKey] > 0) quotas.push({ selector: { question_type: type, category: row.name, subcategory: null }, minimum: row[countKey], maximum: row[countKey] });
+      for (const sub of row.subs) {
+        if (sub[minKey] > 0 || sub[maxKey] != null) {
+          quotas.push({ selector: { question_type: type, category: row.name, subcategory: sub.name }, minimum: sub[minKey], maximum: sub[maxKey] });
+        }
+      }
+    }
+  }
+  const patterns = structuredClone(state.patterns);
+  const template = {
+    schema_version: 1,
+    name: byId("template-name").value.trim() || "Custom template",
+    tossup_capacity: rows.reduce((sum, row) => sum + row.tossups, 0),
+    bonus_capacity: rows.reduce((sum, row) => sum + row.bonuses, 0),
+    quotas,
+    allowed_patterns: patterns,
+    leftover_bounds: [
+      { question_type: "tossup", minimum: 0, maximum: byId("leftover-tu").value === "" ? null : Number(byId("leftover-tu").value) },
+      { question_type: "bonus", minimum: 0, maximum: byId("leftover-bonus").value === "" ? null : Number(byId("leftover-bonus").value) },
+    ],
+  };
+  loadTemplateForm(template);
+  byId("template-select").value = "";
+  scheduleFeasibility();
+  setNotice("Category rules applied to the quota list. Review them below.", "success");
+}
+
+function isSimpleRule(rule) {
+  return rule && Array.isArray(rule.categories) && rule.counts && !rule.groups;
+}
+
+function simpleRuleProblem(rule) {
+  const tossups = Number(rule.counts.tossup || 0);
+  const bonuses = Number(rule.counts.bonus || 0);
+  if (!rule.categories.length) return "choose at least one category.";
+  if (tossups + bonuses < 1) return "require at least one tossup or bonus.";
+  if (rule.distinct_categories && Math.max(tossups, bonuses) > rule.categories.length) {
+    return "with different categories, each question type needs at least as many categories as questions.";
+  }
+  return "";
+}
+
+function plural(count, noun) { return `${count} ${noun}${count === 1 ? "" : "s"}`; }
+
+function ruleSentence(rule) {
+  const tossups = Number(rule.counts.tossup || 0);
+  const bonuses = Number(rule.counts.bonus || 0);
+  const parts = [];
+  if (tossups) parts.push(plural(tossups, "tossup"));
+  if (bonuses) parts.push(plural(bonuses, "bonus").replace("bonuss", "bonuses"));
+  const list = rule.categories.length ? rule.categories.join(", ") : "…";
+  return `Each packet needs ${parts.join(" and ") || "no questions"} from ${list}${rule.distinct_categories ? ", each from a different category" : ""}.`;
+}
+
+function describeOtherRule(rule) {
+  if (rule.groups) {
+    const counts = rule.counts || {};
+    return `Group rule: ${rule.groups.length} category group${rule.groups.length === 1 ? "" : "s"}, ${counts.tossup ?? 0} tossups and ${counts.bonus ?? 0} bonuses per packet. Edit in Advanced JSON.`;
+  }
+  if (rule.selectors) return `Exact combinations rule: ${(rule.patterns || []).length} allowed pattern(s) over ${rule.selectors.length} selector(s). Edit in Advanced JSON.`;
+  return "Custom rule. Edit in Advanced JSON.";
+}
+
+function syncPatternJson() {
+  byId("patterns-json").value = JSON.stringify(state.patterns, null, 2);
+  byId("patterns-json-error").hidden = true;
+}
+
+function setPatterns(patterns) {
+  state.patterns = Array.isArray(patterns) ? patterns : [];
+  renderPatterns();
+}
+
+function patternCard(rule, index) {
+  if (!isSimpleRule(rule)) {
+    return `<div class="pattern-card readonly" data-index="${index}">
+      <div class="pattern-top"><strong>${escapeHtml(rule.name || "Unnamed rule")}</strong><button type="button" class="remove-row pattern-remove" aria-label="Remove rule">×</button></div>
+      <p class="small muted-text">${escapeHtml(describeOtherRule(rule))}</p></div>`;
+  }
+  const known = state.pool ? Object.keys(state.pool.categories) : [];
+  const options = [...new Set([...known, ...rule.categories])];
+  const chips = options.map((name) => `<label class="chip"><input type="checkbox" class="pattern-cat" value="${escapeHtml(name)}" ${rule.categories.includes(name) ? "checked" : ""}>${escapeHtml(name)}</label>`).join("");
+  return `<div class="pattern-card" data-index="${index}">
+    <div class="pattern-top">
+      <input type="text" class="pattern-name" value="${escapeHtml(rule.name || "")}" placeholder="Rule name (optional)" aria-label="Rule name">
+      <button type="button" class="remove-row pattern-remove" aria-label="Remove rule">×</button>
+    </div>
+    <div class="pattern-counts">
+      <label>Tossups <input type="number" min="0" class="pattern-tu" value="${Number(rule.counts.tossup || 0)}"></label>
+      <label>Bonuses <input type="number" min="0" class="pattern-bonus" value="${Number(rule.counts.bonus || 0)}"></label>
+      <label class="compact-check"><input type="checkbox" class="pattern-distinct" ${rule.distinct_categories ? "checked" : ""}> Each from a different category</label>
+    </div>
+    <div class="chips" role="group" aria-label="Categories">${chips || '<span class="small muted-text">Import a pool to pick categories, or add one below.</span>'}</div>
+    <div class="add-custom"><input type="text" class="pattern-custom" placeholder="Add another category name" aria-label="Custom category" list="category-options"><button type="button" class="button small secondary pattern-add-cat">Add</button></div>
+    <div class="pattern-sentence"></div>
+    <div class="cat-error" hidden></div>
+  </div>`;
+}
+
+function refreshPatternCard(card) {
+  const rule = state.patterns[Number(card.dataset.index)];
+  if (!isSimpleRule(rule)) return;
+  card.querySelector(".pattern-sentence").textContent = ruleSentence(rule);
+  const problem = simpleRuleProblem(rule);
+  const box = card.querySelector(".cat-error");
+  box.hidden = !problem;
+  box.textContent = problem ? `Needs attention: ${problem}` : "";
+}
+
+function renderPatterns() {
+  const list = byId("pattern-list");
+  list.innerHTML = state.patterns.length
+    ? state.patterns.map(patternCard).join("")
+    : '<p class="small muted-text">No additional patterns. Add one if some categories should be combined or kept distinct within each packet.</p>';
+  list.querySelectorAll(".pattern-card").forEach(refreshPatternCard);
+  syncPatternJson();
+}
+
+function updatePatternFromCard(card) {
+  const rule = state.patterns[Number(card.dataset.index)];
+  if (!isSimpleRule(rule)) return;
+  rule.name = card.querySelector(".pattern-name").value.trim() || `Category mix ${Number(card.dataset.index) + 1}`;
+  rule.counts = {
+    tossup: Number(card.querySelector(".pattern-tu").value || 0),
+    bonus: Number(card.querySelector(".pattern-bonus").value || 0),
+  };
+  rule.distinct_categories = card.querySelector(".pattern-distinct").checked;
+  rule.categories = [...card.querySelectorAll(".pattern-cat:checked")].map((input) => input.value);
+  refreshPatternCard(card);
+  syncPatternJson();
+  scheduleFeasibility();
 }
 
 function renderOptions() {
@@ -370,9 +651,14 @@ async function initialize() {
     ]);
     renderOptions();
     const select = byId("template-select");
-    select.innerHTML = state.templates.map((entry, index) =>
-      `<option value="${index}">${escapeHtml(entry.name)}</option>`
-    ).join("");
+    select.innerHTML = `<option value="" hidden>Custom (your edits)</option>
+      <optgroup label="Pre-built templates">${state.templates.map((entry, index) =>
+        `<option value="${index}">${escapeHtml(entry.name)}</option>`).join("")}</optgroup>
+      <optgroup label="Generate from your imported pool">
+        <option value="${START_MIRROR}">Suggest: mirror the pool's category mix</option>
+        <option value="${START_CATEGORIES}">Suggest: build by category and subcategory</option>
+      </optgroup>
+      <optgroup label="Build your own"><option value="${START_SCRATCH}">Start from scratch</option></optgroup>`;
     if (state.templates.length) {
       const winterIndex = state.templates.findIndex((entry) => entry.id === "acf-winter-final.json");
       const initialIndex = winterIndex >= 0 ? winterIndex : 0;
@@ -427,47 +713,149 @@ byId("load-demo").addEventListener("click", async () => {
   finally { setBusy(button, false); }
 });
 
+const START_MIRROR = "start:mirror";
+const START_CATEGORIES = "start:categories";
+const START_SCRATCH = "start:scratch";
+
+function showWizard(mode) {
+  const categories = mode === "categories";
+  byId("wizard").hidden = !mode;
+  byId("wizard-mirror").hidden = categories;
+  byId("wizard-categories").hidden = !categories;
+  if (categories && !document.querySelector(".cat-row")) prefillCategoryRows();
+}
+
 byId("template-select").addEventListener("change", (event) => {
-  const entry = state.templates[Number(event.target.value)];
-  if (entry) {
+  const value = event.target.value;
+  showWizard(value === START_MIRROR ? "mirror" : value === START_CATEGORIES ? "categories" : "");
+  if (value === START_SCRATCH) {
+    byId("template-name").value = "My packet template";
+    byId("tossup-capacity").value = 20;
+    byId("bonus-capacity").value = 20;
+    byId("tossup-quota-list").innerHTML = "";
+    byId("bonus-quota-list").innerHTML = "";
+    setPatterns([]);
+    byId("leftover-tu").value = "";
+    byId("leftover-bonus").value = "";
+    return;
+  }
+  const entry = state.templates[Number(value)];
+  if (value !== "" && entry) {
     loadTemplateForm(entry.template);
     byId("packet-count").value = defaultPacketCount(entry.id);
   }
 });
-byId("new-template").addEventListener("click", () => {
-  byId("template-select").value = "";
-  byId("template-name").value = "My packet template";
-  byId("tossup-capacity").value = 20;
-  byId("bonus-capacity").value = 20;
-  byId("quota-list").innerHTML = "";
-  byId("patterns-json").value = "[]";
-  byId("leftover-tu").value = "";
-  byId("leftover-bonus").value = "";
+byId("feasibility").addEventListener("click", (event) => {
+  if (event.target.id === "use-max-packets") {
+    byId("packet-count").value = event.target.dataset.count;
+    scheduleFeasibility();
+  }
 });
-byId("add-quota").addEventListener("click", () => {
-  byId("quota-list").insertAdjacentHTML("beforeend", quotaRow());
+byId("view-configure").addEventListener("input", scheduleFeasibility);
+byId("view-configure").addEventListener("click", (event) => {
+  if (event.target.closest("#add-tossup-quota, #add-bonus-quota, .remove-row")) scheduleFeasibility();
 });
-byId("quota-list").addEventListener("click", (event) => {
-  if (event.target.classList.contains("remove-row")) event.target.closest(".quota-row").remove();
+byId("template-select").addEventListener("change", scheduleFeasibility);
+byId("template-file").addEventListener("change", () => window.setTimeout(scheduleFeasibility, 0));
+byId("cat-add").addEventListener("click", () => {
+  byId("cat-rows").insertAdjacentHTML("beforeend", catRow());
+  updateCategorySummary();
 });
-byId("add-category-pattern").addEventListener("click", () => {
+byId("cat-apply").addEventListener("click", applyCategoryRows);
+byId("cat-rows").addEventListener("input", updateCategorySummary);
+byId("cat-rows").addEventListener("click", (event) => {
+  const target = event.target;
+  if (target.classList.contains("cat-add-sub")) target.closest(".cat-row").querySelector(".cat-subs").insertAdjacentHTML("beforeend", subRow());
+  else if (target.classList.contains("sub-remove")) target.closest(".sub-row").remove();
+  else if (target.classList.contains("cat-remove")) target.closest(".cat-row").remove();
+  else return;
+  updateCategorySummary();
+});
+byId("wizard-run").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  setBusy(button, true, "Suggesting…");
   try {
-    const patterns = JSON.parse(byId("patterns-json").value || "[]");
-    const categories = byId("pattern-categories").value.split(",").map((item) => item.trim()).filter(Boolean);
-    const tossups = Number(byId("pattern-tossups").value || 0);
-    const bonuses = Number(byId("pattern-bonuses").value || 0);
-    if (!categories.length || tossups + bonuses < 1) {
-      throw new Error("Enter one or more categories and require at least one tossup or bonus.");
-    }
-    patterns.push({
-      name: byId("pattern-name").value.trim() || `Category mix ${patterns.length + 1}`,
-      categories,
-      counts: { tossup: tossups, bonus: bonuses },
-      distinct_categories: byId("pattern-distinct").checked,
+    const result = await api("/api/suggest-template", {
+      name: byId("template-name").value.trim() || "Suggested template",
+      packet_count: Number(byId("packet-count").value),
+      tossup_capacity: Number(byId("wizard-tossups").value),
+      bonus_capacity: Number(byId("wizard-bonuses").value),
+      tolerance: Number(byId("wizard-tolerance").value),
     });
-    byId("patterns-json").value = JSON.stringify(patterns, null, 2);
-    setNotice("Category count rule added. Save or run the template to validate it.", "success");
+    loadTemplateForm(result.template);
+    byId("template-select").value = "";
+    scheduleFeasibility();
+    setNotice("Suggested quotas filled in. Review and adjust them before continuing.", "success");
   } catch (error) { setNotice(error.message, "error"); }
+  finally { setBusy(button, false); }
+});
+byId("duplicate-template").addEventListener("click", () => {
+  try {
+    const template = currentTemplateFromForm();
+    template.name = `${template.name} (copy)`;
+    loadTemplateForm(template);
+    byId("template-select").value = "";
+    setNotice("Template duplicated. Rename it and edit freely.", "success");
+  } catch (error) { setNotice(error.message, "error"); }
+});
+byId("reset-template").addEventListener("click", () => {
+  const value = byId("template-select").value;
+  const entry = /^\d+$/.test(value) ? state.templates[Number(value)] : null;
+  if (!entry) { setNotice("Choose a pre-built template as your starting point to reset to.", "error"); return; }
+  loadTemplateForm(entry.template);
+  scheduleFeasibility();
+  setNotice(`Reset to “${entry.template.name}”.`, "success");
+});
+for (const type of ["tossup", "bonus"]) {
+  byId(`add-${type}-quota`).addEventListener("click", () => {
+    byId(`${type}-quota-list`).insertAdjacentHTML("beforeend", quotaRow());
+  });
+  byId(`${type}-quota-list`).addEventListener("click", (event) => {
+    if (event.target.classList.contains("remove-row")) event.target.closest(".quota-row").remove();
+  });
+}
+byId("add-pattern").addEventListener("click", () => {
+  state.patterns.push({ name: `Category mix ${state.patterns.length + 1}`, categories: [], counts: { tossup: 1, bonus: 1 }, distinct_categories: false });
+  renderPatterns();
+  byId("pattern-list").lastElementChild.querySelector(".pattern-name").focus();
+});
+byId("pattern-list").addEventListener("input", (event) => {
+  const card = event.target.closest(".pattern-card");
+  if (card && !event.target.classList.contains("pattern-custom")) updatePatternFromCard(card);
+});
+byId("pattern-list").addEventListener("click", (event) => {
+  const card = event.target.closest(".pattern-card");
+  if (!card) return;
+  const index = Number(card.dataset.index);
+  if (event.target.classList.contains("pattern-remove")) {
+    state.patterns.splice(index, 1);
+    renderPatterns();
+    scheduleFeasibility();
+  } else if (event.target.classList.contains("pattern-add-cat")) {
+    const input = card.querySelector(".pattern-custom");
+    const name = input.value.trim();
+    const rule = state.patterns[index];
+    if (name && isSimpleRule(rule) && !rule.categories.includes(name)) {
+      rule.categories.push(name);
+      renderPatterns();
+      scheduleFeasibility();
+    }
+  }
+});
+byId("apply-patterns-json").addEventListener("click", () => {
+  const box = byId("patterns-json-error");
+  try {
+    const parsed = JSON.parse(byId("patterns-json").value || "[]");
+    if (!Array.isArray(parsed) || parsed.some((rule) => !rule || typeof rule !== "object" || Array.isArray(rule))) {
+      throw new Error("Rules must be a JSON array of objects.");
+    }
+    setPatterns(parsed);
+    scheduleFeasibility();
+    setNotice("Distribution patterns updated from JSON.", "success");
+  } catch (error) {
+    box.hidden = false;
+    box.textContent = `Not applied: ${error.message}`;
+  }
 });
 byId("template-file").addEventListener("change", async (event) => {
   const file = event.target.files[0];
@@ -484,10 +872,43 @@ byId("template-file").addEventListener("change", async (event) => {
 byId("save-template").addEventListener("click", () => {
   try {
     const template = currentTemplateFromForm();
+    const selectedValue = byId("template-select").value;
+    const selectedPreset = /^\d+$/.test(selectedValue) ? state.templates[Number(selectedValue)] : null;
+    if (selectedPreset && slug(template.name) === slug(selectedPreset.template.name)) {
+      throw new Error(`Choose a different template name before downloading; “${selectedPreset.template.name}” is a pre-built template filename.`);
+    }
     const blob = new Blob([`${JSON.stringify(template, null, 2)}\n`], { type: "application/json" });
     download(blob, `${slug(template.name)}.json`);
     setNotice("Template JSON downloaded.", "success");
   } catch (error) { setNotice(error.message, "error"); }
+});
+
+byId("copy-tossup-quotas").addEventListener("click", () => {
+  const tossupRows = [...byId("tossup-quota-list").querySelectorAll(".quota-row")];
+  const bonusList = byId("bonus-quota-list");
+  if (!tossupRows.length) {
+    setNotice("Add at least one tossup quota before reusing its distribution for bonuses.", "error");
+    return;
+  }
+  if (tossupRows.some((row) => !row.querySelector(".quota-category").value.trim())) {
+    setNotice("Complete every tossup category before copying its distribution to bonuses.", "error");
+    return;
+  }
+  if (bonusList.querySelector(".quota-row") && !window.confirm("Replace all current bonus quotas with copies of the tossup categories, subcategories, minimums, and maximums?")) {
+    return;
+  }
+  const quotas = tossupRows.map((row) => ({
+    selector: {
+      question_type: "bonus",
+      category: row.querySelector(".quota-category").value.trim(),
+      subcategory: row.querySelector(".quota-subcategory").value.trim() || null,
+    },
+    minimum: Number(row.querySelector(".quota-min").value || 0),
+    maximum: row.querySelector(".quota-max").value === "" ? null : Number(row.querySelector(".quota-max").value),
+  }));
+  bonusList.innerHTML = quotas.map(quotaRow).join("");
+  scheduleFeasibility();
+  setNotice("Bonus quotas now match the tossup categories, subcategories, minimums, and maximums.", "success");
 });
 
 byId("run-build").addEventListener("click", async (event) => {

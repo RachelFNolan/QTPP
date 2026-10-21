@@ -40,7 +40,7 @@ def check_pool_feasibility(pool: QuestionSet, spec: PacketBuildSpec) -> tuple[st
         have = sum(c for key, c in counts.items() if key.question_type == question_type)
         if have < needed:
             errors.append(
-                f"{question_type}s: need {needed} for {spec.packet_count} packets, pool has {have}"
+                f"{_plural(question_type)}: need {needed} for {spec.packet_count} packets, pool has {have}"
             )
 
     for quota in spec.quotas:
@@ -141,3 +141,7 @@ def _describe(selector: CountSelector) -> str:
         for part in (selector.question_type, selector.category, selector.subcategory)
         if part
     )
+
+
+def _plural(question_type: str) -> str:
+    return "bonuses" if question_type == "bonus" else f"{question_type}s"

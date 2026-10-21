@@ -70,13 +70,45 @@
       <section class="view" id="view-configure">
         <div class="section-heading">
           <div><p class="eyebrow">BUILD RULES</p><h2>Configure packets</h2></div>
-          <button id="new-template" class="button secondary">Create from scratch</button>
+          <div class="actions">
+            <button id="duplicate-template" class="button secondary">Duplicate</button>
+            <button id="reset-template" class="button secondary">Reset to preset</button>
+          </div>
         </div>
         <div class="configure-grid">
           <article class="card">
-            <div class="field-row">
-              <label for="template-select">Ready-to-use template</label>
+            <div class="field-row start-point">
+              <label for="template-select">Starting point</label>
               <select id="template-select"></select>
+              <p class="small muted-text">Pick a <strong>pre-built template</strong> to use as-is or as a starting point (every field below stays editable), let the app <strong>suggest one from your imported pool</strong>, or <strong>start from scratch</strong>.</p>
+            </div>
+            <div id="wizard" class="wizard" hidden>
+              <div id="wizard-mirror">
+                <p class="small muted-text">Sets per-category quotas to mirror the pool's category mix, using the packet count below. You can edit everything afterwards.</p>
+                <div class="field-grid two">
+                  <div class="field-row"><label for="wizard-tossups">Tossups per packet</label><input id="wizard-tossups" type="number" min="0" value="20"></div>
+                  <div class="field-row"><label for="wizard-bonuses">Bonuses per packet</label><input id="wizard-bonuses" type="number" min="0" value="20"></div>
+                </div>
+                <div class="field-row">
+                  <label for="wizard-tolerance">Strictness</label>
+                  <select id="wizard-tolerance">
+                    <option value="0" selected>Exact counts per category</option>
+                    <option value="1">Target ±1</option>
+                    <option value="2">Target ±2 (flexible)</option>
+                  </select>
+                </div>
+                <button id="wizard-run" class="button secondary" disabled>Suggest quotas</button>
+              </div>
+              <div id="wizard-categories" hidden>
+                <p class="small muted-text">Set how many tossups and bonuses each major category gets per packet, then optionally split a category into subcategories with their own minimum and maximum. Applying replaces the quota list below and sets the packet sizes to the totals.</p>
+                <div class="cat-columns" aria-hidden="true"><span>Major category</span><span>Tossups / packet</span><span>Bonuses / packet</span><span></span><span></span></div>
+                <div id="cat-rows" class="cat-rows"></div>
+                <div class="actions">
+                  <button id="cat-add" class="button small secondary" type="button">Add category</button>
+                  <button id="cat-apply" class="button small primary" type="button" disabled>Apply to template</button>
+                </div>
+                <div id="cat-summary" class="small muted-text"></div>
+              </div>
             </div>
             <div class="field-row">
               <label for="template-name">Template name</label>
@@ -87,24 +119,46 @@
               <div class="field-row"><label for="bonus-capacity">Bonuses per packet</label><input id="bonus-capacity" type="number" min="0"></div>
             </div>
             <div class="subheading-row">
-              <div><h3>Category and subcategory quotas</h3><p>Minimum and optional maximum counts in each packet.</p></div>
-              <button id="add-quota" class="button small secondary">Add quota</button>
+              <div><h3>Category and subcategory quotas</h3><p>Set minimum and optional maximum counts for each question type in every packet.</p></div>
             </div>
-            <div id="quota-list" class="quota-list"></div>
+            <section class="quota-section" aria-labelledby="tossup-quotas-heading">
+              <div class="quota-section-heading">
+                <h4 id="tossup-quotas-heading">Tossup quotas</h4>
+                <button id="add-tossup-quota" class="button small secondary" type="button">Add tossup quota</button>
+              </div>
+              <div class="quota-columns" aria-hidden="true"><span>Category</span><span>Subcategory (optional)</span><span>Min</span><span>Max</span><span></span></div>
+              <div id="tossup-quota-list" class="quota-list"></div>
+            </section>
+            <section class="quota-section" aria-labelledby="bonus-quotas-heading">
+              <div class="quota-section-heading">
+                <h4 id="bonus-quotas-heading">Bonus quotas</h4>
+                <div class="actions">
+                  <button id="copy-tossup-quotas" class="button small secondary" type="button" title="Copies tossup categories, subcategories, minimums, and maximums, replacing current bonus quotas.">Copy tossup quotas</button>
+                  <button id="add-bonus-quota" class="button small secondary" type="button">Add bonus quota</button>
+                </div>
+              </div>
+              <div class="quota-columns" aria-hidden="true"><span>Category</span><span>Subcategory (optional)</span><span>Min</span><span>Max</span><span></span></div>
+              <div id="bonus-quota-list" class="quota-list"></div>
+            </section>
             <datalist id="category-options"></datalist>
             <datalist id="subcategory-options"></datalist>
             <div class="subheading-row advanced-title">
-              <div><h3>Allowed distribution patterns</h3><p>Build common category rules here; advanced shapes remain editable as JSON.</p></div>
+              <div>
+                <h3>Additional distribution patterns
+                  <span class="tip" tabindex="0" role="note" aria-label="Rules beyond the quotas above. Example: each packet needs 1 tossup and 1 bonus from Geography, Current Events, Pop Culture or Other Academic, each from a different category.">i<span class="tip-text">Extra per-packet rules beyond the quotas above. Example: each packet needs 1 tossup and 1 bonus from Geography, Current Events, Pop Culture or Other Academic, each from a different category.</span></span>
+                </h3>
+                <p>Optional rules that apply to every packet and cover a group of categories together, beyond the per-category quotas above. For example: <em>1 tossup and 1 bonus from Geography, Current Events, Pop Culture or Other Academic, each from a different category.</em></p>
+              </div>
+              <button id="add-pattern" class="button small secondary" type="button">Add rule</button>
             </div>
-            <div class="pattern-builder">
-              <input id="pattern-name" type="text" placeholder="Rule name">
-              <input id="pattern-categories" type="text" placeholder="Categories, comma separated">
-              <input id="pattern-tossups" type="number" min="0" value="0" aria-label="Required tossups across selected categories">
-              <input id="pattern-bonuses" type="number" min="0" value="0" aria-label="Required bonuses across selected categories">
-              <label class="compact-check"><input id="pattern-distinct" type="checkbox"> Distinct categories</label>
-              <button id="add-category-pattern" class="button small secondary">Add category rule</button>
-            </div>
-            <textarea id="patterns-json" class="code-input" rows="9" spellcheck="false" aria-label="Allowed count patterns JSON"></textarea>
+            <div id="pattern-list" class="pattern-list"></div>
+            <details class="advanced-json">
+              <summary>Advanced: view or edit JSON</summary>
+              <p class="small muted-text">Group rules and exact-combination rules can only be edited here. Changes replace the rules above when applied.</p>
+              <textarea id="patterns-json" class="code-input" rows="9" spellcheck="false" aria-label="Additional distribution patterns JSON"></textarea>
+              <div class="actions"><button id="apply-patterns-json" class="button small secondary" type="button">Apply JSON</button></div>
+              <div id="patterns-json-error" class="cat-error" hidden></div>
+            </details>
             <div class="field-grid two leftover-grid">
               <div class="field-row"><label for="leftover-tu">Allowed leftover tossups (max)</label><input id="leftover-tu" type="number" min="0"></div>
               <div class="field-row"><label for="leftover-bonus">Allowed leftover bonuses (max)</label><input id="leftover-bonus" type="number" min="0"></div>
@@ -119,6 +173,7 @@
             <p class="eyebrow">BUILD SIZE</p>
             <div class="field-row"><label for="packet-count">Number of packets</label><input id="packet-count" type="number" value="1" min="1"></div>
             <div class="field-row"><label for="seed">Repeatable seed</label><input id="seed" type="number" value="0"></div>
+            <div id="feasibility" class="hint-box feasibility" aria-live="polite">Import a pool to check feasibility.</div>
             <div id="config-pool-hint" class="hint-box">Import a pool to see its category and subcategory values.</div>
             <p class="small muted-text">Hard constraints are validated before export. Leftover questions remain unassigned in the pool.</p>
             <button class="button primary full" data-go="compare">Continue to compare <span aria-hidden="true">→</span></button>

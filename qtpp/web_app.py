@@ -51,6 +51,10 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                 )
             elif route == "/api/demo":
                 result = self.workspace.import_demo()
+            elif route == "/api/feasibility":
+                result = self.workspace.feasibility(payload.get("template"), payload.get("packet_count"))
+            elif route == "/api/suggest-template":
+                result = self.workspace.suggest_template(payload)
             elif route == "/api/generate":
                 result = self.workspace.generate(payload)
             elif route == "/api/review":
