@@ -35,6 +35,41 @@ class SolverTests(unittest.TestCase):
         used = [q for layout in first.layouts for q in (*layout.tossups, *layout.bonuses)]
         self.assertEqual(len(used), len(set(used)))
 
+    def test_separation_window_is_enforced_and_reported(self) -> None:
+        from dataclasses import replace
+        from qtpp.build_spec import TossupBonusSeparation
+        from qtpp.solving import PoolIndex, separation_conflicts, validate_layouts
+
+        index = PoolIndex.from_pool(self.pool)
+        for sep in (
+            TossupBonusSeparation(2),
+            TossupBonusSeparation(1, by_category=False, by_subcategory=True),
+        ):
+            spec = replace(self.template.create_spec(4), separation=sep)
+            result = solve_baseline(self.pool, spec, self.scorer, seed=3, iterations=500)
+            self.assertEqual(result.hard_errors, ())
+            for layout in result.layouts:
+                self.assertEqual(
+                    separation_conflicts(layout.tossups, layout.bonuses, index.selector_of, sep), []
+                )
+        # An impossible window is reported, not raised.
+        spec = replace(self.template.create_spec(4), separation=TossupBonusSeparation(40))
+        result = solve_baseline(self.pool, spec, self.scorer, seed=3, iterations=100)
+        self.assertTrue(any("within a window" in e for e in result.hard_errors))
+
+    def test_separation_spec_and_json_round_trip(self) -> None:
+        from dataclasses import replace
+        from qtpp.build_spec import TossupBonusSeparation
+        from qtpp.template_json import template_from_dict, template_to_dict
+
+        with self.assertRaises(ValueError):
+            TossupBonusSeparation(0)
+        with self.assertRaises(ValueError):
+            TossupBonusSeparation(3, by_category=False, by_subcategory=False)
+        template = replace(self.template, separation=TossupBonusSeparation(3, True, True))
+        self.assertEqual(template_from_dict(template_to_dict(template)), template)
+        self.assertIsNone(template_from_dict(template_to_dict(self.template)).separation)
+
     def test_baseline_reports_infeasible_requests(self) -> None:
         with self.assertRaises(InfeasibleError):
             solve_baseline(self.pool, self.template.create_spec(40), self.scorer)

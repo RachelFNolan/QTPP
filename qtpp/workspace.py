@@ -21,6 +21,14 @@ from .baseline_stats import (
     normalize,
     sample_random_layouts,
 )
+from .judged_scorer import (
+    HARD_FLOOR,
+    SOFT_FLOOR,
+    JudgedPairScorer,
+    Judgments,
+    flagged_pairs_from_layouts,
+    load_judgments,
+)
 from .label_store import DEFAULT_LABELS, append_label, label_summary, load_labels, pair_key
 from .scoring import PacketLayout, SoftWeights, score_layouts
 from .similarity import SimilarityWeights, build_similarity, question_text
@@ -56,6 +64,7 @@ class _Run:
     scorer: Any
     weights: SoftWeights
     similarity_id: str
+    base_scorer: Any = None
     cross_scores: dict[str, dict[str, float]] = field(default_factory=dict)
     normalized: dict[str, Any] = field(default_factory=dict)
 
@@ -77,6 +86,8 @@ class Workspace:
         self._template: BuildTemplate | None = None
         self._runs: list[_Run] = []
         self._baseline: dict[str, dict[str, float]] = {}
+        self._last_request: dict[str, Any] | None = None
+        self._judgment_info: dict[str, Any] | None = None
         self._selected_run = 0
         self._draft: QuestionSet | None = None
         self._review_errors: tuple[str, ...] = ()
@@ -167,6 +178,8 @@ class Workspace:
             self._template = None
             self._runs = []
             self._baseline = {}
+            self._last_request = None
+            self._judgment_info = None
             self._selected_run = 0
             self._draft = None
             self._review_errors = ()
@@ -270,110 +283,180 @@ class Workspace:
 
     def generate(self, request: Mapping[str, Any]) -> dict[str, Any]:
         with self._lock:
+            return self._generate(request)
+
+    def rerun(self, request: Mapping[str, Any]) -> dict[str, Any]:
+        """Rebuild with the last settings, applying saved similarity judgments."""
+        with self._lock:
+            if self._last_request is None or not self._runs or self._draft is None:
+                raise WorkspaceError("Generate packets before re-running with judgments.")
             pool = self._require_pool()
-            template_data = request.get("template")
-            if not isinstance(template_data, dict):
-                raise WorkspaceError("Select or create a valid packet template.")
-            try:
-                template = template_from_dict(template_data)
-                packet_count = _positive_integer(request.get("packet_count"), "packet_count")
-                spec = template.create_spec(packet_count)
-                solver_ids = _string_list(request.get("solvers"), "solvers")
-                similarity_ids = _string_list(request.get("similarities"), "similarities")
-                seed = _integer(request.get("seed", 0), "seed")
-                baseline_samples = _integer(
-                    request.get("baseline_samples", DEFAULT_SAMPLES), "baseline_samples"
-                )
-                if not 1 <= baseline_samples <= MAX_SAMPLES:
-                    raise ValueError(
-                        f"baseline_samples must be between 1 and {MAX_SAMPLES}."
-                    )
-            except (KeyError, TypeError, ValueError) as error:
-                raise WorkspaceError(str(error)) from error
-            if not solver_ids or not similarity_ids:
-                raise WorkspaceError("Select at least one solver and one similarity scorer.")
-            unknown_solvers = sorted(set(solver_ids) - {"baseline", "cpsat"})
-            unknown_similarities = sorted(set(similarity_ids) - SIMILARITY_OPTIONS.keys())
-            if unknown_solvers or unknown_similarities:
-                raise WorkspaceError(
-                    f"Unknown options: {', '.join((*unknown_solvers, *unknown_similarities))}"
-                )
-            if "cpsat" in solver_ids and cpsat_solver.cp_model is None:
-                raise WorkspaceError(
-                    "CP-SAT is unavailable; install the optional dependencies with "
-                    "`pip install -r requirements-dev.txt`."
-                )
-            try:
-                weights = _soft_weights(request.get("soft_weights"))
-            except (TypeError, ValueError) as error:
-                raise WorkspaceError(str(error)) from error
-            runs: list[_Run] = []
-            scorers = {
-                similarity_id: build_similarity(pool, SIMILARITY_OPTIONS[similarity_id])
-                for similarity_id in dict.fromkeys(similarity_ids)
+            selected_before = self._selected_run
+            layouts_before = _layouts_from_question_set(self._draft)
+            judgments = load_judgments(self._labels_path, _questions_by_id(pool))
+            separate = bool(request.get("separate_flagged", False))
+            self._generate(
+                {**self._last_request, "use_judgments": True, "separate_flagged": separate}
+            )
+            payload = self._select_run(min(selected_before, len(self._runs) - 1))
+            payload["rerun"] = {
+                "similar_labels": len(judgments.similar),
+                "different_labels": len(judgments.different),
+                "flagged_before": flagged_pairs_from_layouts(judgments, layouts_before),
+                "flagged_after": flagged_pairs_from_layouts(
+                    judgments, _layouts_from_question_set(self._draft)
+                ),
+                "separate": separate,
             }
-            for solver_id in solver_ids:
-                for similarity_id in similarity_ids:
-                    pair_scorer = scorers[similarity_id]
-                    try:
-                        generated = generate_packets(
-                            pool,
-                            spec,
-                            pair_scorer,
-                            weights,
-                            solver=solver_id,
-                            seed=seed,
-                        )
-                    except (InfeasibleError, RuntimeError, ValueError) as error:
-                        raise WorkspaceError(f"{solver_id} / {similarity_id}: {error}") from error
-                    runs.append(
-                        _Run(generated, spec, pair_scorer, weights, similarity_id)
-                    )
-            category_of = PoolIndex.from_pool(pool).category_of
-            for run in runs:
-                layouts = _layouts_from_question_set(run.generated.question_set)
-                # Re-score every layout with every selected scorer so runs can be
-                # compared on one common yardstick.
-                run.cross_scores = {
-                    similarity_id: _score_dict(
-                        score_layouts(layouts, category_of, scorer, weights)
-                    )
-                    for similarity_id, scorer in scorers.items()
-                }
-            try:
-                stats = baseline_stats(
-                    pool,
-                    sample_random_layouts(pool, spec, baseline_samples, seed),
-                    scorers,
-                    weights,
+            return payload
+
+    def _generate(self, request: Mapping[str, Any]) -> dict[str, Any]:
+        pool = self._require_pool()
+        template_data = request.get("template")
+        if not isinstance(template_data, dict):
+            raise WorkspaceError("Select or create a valid packet template.")
+        try:
+            template = template_from_dict(template_data)
+            packet_count = _positive_integer(request.get("packet_count"), "packet_count")
+            spec = template.create_spec(packet_count)
+            solver_ids = _string_list(request.get("solvers"), "solvers")
+            similarity_ids = _string_list(request.get("similarities"), "similarities")
+            seed = _integer(request.get("seed", 0), "seed")
+            baseline_samples = _integer(
+                request.get("baseline_samples", DEFAULT_SAMPLES), "baseline_samples"
+            )
+            if not 1 <= baseline_samples <= MAX_SAMPLES:
+                raise ValueError(
+                    f"baseline_samples must be between 1 and {MAX_SAMPLES}."
                 )
-            except (InfeasibleError, ValueError) as error:
-                raise WorkspaceError(f"Random baseline failed: {error}") from error
-            for run in runs:
-                run.normalized = normalize(
-                    {key: value["total"] for key, value in run.cross_scores.items()}, stats
-                )
-            self._baseline = {
-                key: {"mean": stat.mean, "stdev": stat.stdev, "samples": stat.samples}
-                for key, stat in stats.items()
+        except (KeyError, TypeError, ValueError) as error:
+            raise WorkspaceError(str(error)) from error
+        if not solver_ids or not similarity_ids:
+            raise WorkspaceError("Select at least one solver and one similarity scorer.")
+        unknown_solvers = sorted(set(solver_ids) - {"baseline", "cpsat"})
+        unknown_similarities = sorted(set(similarity_ids) - SIMILARITY_OPTIONS.keys())
+        if unknown_solvers or unknown_similarities:
+            raise WorkspaceError(
+                f"Unknown options: {', '.join((*unknown_solvers, *unknown_similarities))}"
+            )
+        if "cpsat" in solver_ids and cpsat_solver.cp_model is None:
+            raise WorkspaceError(
+                "CP-SAT is unavailable; install the optional dependencies with "
+                "`pip install -r requirements-dev.txt`."
+            )
+        try:
+            weights = _soft_weights(request.get("soft_weights"))
+        except (TypeError, ValueError) as error:
+            raise WorkspaceError(str(error)) from error
+        runs: list[_Run] = []
+        use_judgments = bool(request.get("use_judgments", False))
+        separate = use_judgments and bool(request.get("separate_flagged", False))
+        judgments = (
+            load_judgments(self._labels_path, _questions_by_id(pool))
+            if use_judgments
+            else Judgments()
+        )
+        base_scorers = {
+            similarity_id: build_similarity(pool, SIMILARITY_OPTIONS[similarity_id])
+            for similarity_id in dict.fromkeys(similarity_ids)
+        }
+        # Scores and baselines always use the soft floor so penalties stay comparable;
+        # separation only changes what the solvers optimize.
+        scorers = {
+            key: JudgedPairScorer(scorer, judgments, SOFT_FLOOR)
+            for key, scorer in base_scorers.items()
+        }
+        solving_scorers = (
+            {
+                key: JudgedPairScorer(scorer, judgments, HARD_FLOOR)
+                for key, scorer in base_scorers.items()
             }
-            self._template = template
-            self._runs = runs
-            self._selected_run = 0
-            self._draft = runs[0].generated.question_set
-            self._review_errors = ()
-            return self._workspace_payload()
+            if separate
+            else scorers
+        )
+        for solver_id in solver_ids:
+            for similarity_id in similarity_ids:
+                pair_scorer = scorers[similarity_id]
+                options: dict[str, Any] = {}
+                if separate and solver_id == "cpsat":
+                    options["separate"] = sorted(judgments.similar)
+                try:
+                    generated = generate_packets(
+                        pool,
+                        spec,
+                        solving_scorers[similarity_id],
+                        weights,
+                        solver=solver_id,
+                        seed=seed,
+                        **options,
+                    )
+                except (InfeasibleError, RuntimeError, ValueError) as error:
+                    raise WorkspaceError(f"{solver_id} / {similarity_id}: {error}") from error
+                runs.append(
+                    _Run(
+                        generated,
+                        spec,
+                        pair_scorer,
+                        weights,
+                        similarity_id,
+                        base_scorers[similarity_id],
+                    )
+                )
+        category_of = PoolIndex.from_pool(pool).category_of
+        for run in runs:
+            layouts = _layouts_from_question_set(run.generated.question_set)
+            # Re-score every layout with every selected scorer so runs can be
+            # compared on one common yardstick.
+            run.cross_scores = {
+                similarity_id: _score_dict(
+                    score_layouts(layouts, category_of, scorer, weights)
+                )
+                for similarity_id, scorer in scorers.items()
+            }
+        try:
+            stats = baseline_stats(
+                pool,
+                sample_random_layouts(pool, spec, baseline_samples, seed),
+                scorers,
+                weights,
+            )
+        except (InfeasibleError, ValueError) as error:
+            raise WorkspaceError(f"Random baseline failed: {error}") from error
+        for run in runs:
+            run.normalized = normalize(
+                {key: value["total"] for key, value in run.cross_scores.items()}, stats
+            )
+        self._baseline = {
+            key: {"mean": stat.mean, "stdev": stat.stdev, "samples": stat.samples}
+            for key, stat in stats.items()
+        }
+        self._last_request = dict(request)
+        self._judgment_info = {
+            "use_judgments": use_judgments,
+            "separate": separate,
+            "similar": len(judgments.similar),
+            "different": len(judgments.different),
+        }
+        self._template = template
+        self._runs = runs
+        self._selected_run = 0
+        self._draft = runs[0].generated.question_set
+        self._review_errors = ()
+        return self._workspace_payload()
 
     def select_run(self, index: int) -> dict[str, Any]:
         with self._lock:
-            if not isinstance(index, int) or isinstance(index, bool):
-                raise WorkspaceError("run_index must be an integer.")
-            if index < 0 or index >= len(self._runs):
-                raise WorkspaceError("Selected comparison result no longer exists.")
-            self._selected_run = index
-            self._draft = self._runs[index].generated.question_set
-            self._review_errors = ()
-            return self._workspace_payload()
+            return self._select_run(index)
+
+    def _select_run(self, index: int) -> dict[str, Any]:
+        if not isinstance(index, int) or isinstance(index, bool):
+            raise WorkspaceError("run_index must be an integer.")
+        if index < 0 or index >= len(self._runs):
+            raise WorkspaceError("Selected comparison result no longer exists.")
+        self._selected_run = index
+        self._draft = self._runs[index].generated.question_set
+        self._review_errors = ()
+        return self._workspace_payload()
 
     def review(self, layouts_data: Any) -> dict[str, Any]:
         with self._lock:
@@ -559,6 +642,7 @@ class Workspace:
                 for index, item in enumerate(self._runs)
             ],
             "selected_run": self._selected_run,
+            "judgments": self._judgment_info,
             "baseline": self._baseline,
             "yardsticks": [
                 {"id": similarity_id, "name": _similarity_name(similarity_id)}
@@ -847,6 +931,15 @@ def _composition_findings(
     ]
 
 
+def _conflict_side(
+    question_id: str,
+    questions: Mapping[str, Tossup | Bonus],
+    positions: Mapping[str, tuple[str, int]],
+) -> dict[str, Any]:
+    kind, number = positions[question_id]
+    return {**_question_dict(questions[question_id], kind), "number": number}
+
+
 def _conflict_findings(
     layouts: Sequence[PacketLayout],
     questions: Mapping[str, Tossup | Bonus],
@@ -858,12 +951,20 @@ def _conflict_findings(
         for question_id, question in questions.items()
     }
     candidates: list[dict[str, Any]] = []
+    scorer = run.base_scorer or run.scorer
+    positions = {
+        number: {
+            **{qid: ("tossup", i) for i, qid in enumerate(layout.tossups, start=1)},
+            **{qid: ("bonus", i) for i, qid in enumerate(layout.bonuses, start=1)},
+        }
+        for number, layout in enumerate(layouts, start=1)
+    }
     for packet_number, layout in enumerate(layouts, start=1):
         assigned = (*layout.tossups, *layout.bonuses)
         for first, second in combinations(assigned, 2):
             if first not in questions or second not in questions:
                 continue
-            value = run.scorer.score(first, second)
+            value = scorer.score(first, second)
             candidates.append(
                 {
                     "packet": packet_number,
@@ -881,7 +982,7 @@ def _conflict_findings(
                         "packet": packet_number,
                         "first_id": first,
                         "second_id": second,
-                        "similarity": round(run.scorer.score(first, second), 4),
+                        "similarity": round(scorer.score(first, second), 4),
                         "shared_category": True,
                         "reason": "Adjacent tossups share a category.",
                     }
@@ -902,6 +1003,8 @@ def _conflict_findings(
         key = (item["packet"], pair[0], pair[1], item["reason"])
         if key not in seen:
             seen.add(key)
+            item["first"] = _conflict_side(item["first_id"], questions, positions[item["packet"]])
+            item["second"] = _conflict_side(item["second_id"], questions, positions[item["packet"]])
             if stored:
                 known = stored.get(
                     pair_key(

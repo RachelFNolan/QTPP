@@ -185,7 +185,7 @@ input:focus, select:focus, textarea:focus { border-color: #7ca7eb; box-shadow: 0
 .audit-table td { color: #45566e; }
 .delta { color: #a56817 !important; font-weight: 700; }
 .conflict-list { display: grid; gap: 7px; }
-.conflict-row { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; gap: 7px 8px; align-items: center; padding: 9px; border: 1px solid #edf0f4; border-radius: 6px; }
+.conflict-row { display: grid; grid-template-columns: 70px minmax(0, 1fr) auto; gap: 7px 8px; align-items: center; padding: 9px; border: 1px solid #edf0f4; border-radius: 6px; }
 .conflict-row strong { font-size: 10px; }
 .conflict-row span { color: #68778e; font-size: 10px; }
 .conflict-row em { color: #8b641f; font: normal 10px "DM Mono", monospace; }
@@ -376,5 +376,17 @@ input[aria-invalid="true"] { border-color: var(--red); background: #fff7f6; }
 .score-pair .score-block small { display: block; color: var(--muted); font-size: 10px; }
 .score-pair .score-block:first-child .score { color: #17664f; }
 .baseline-field { margin-top: 4px; }
-.label-actions { grid-column: 2 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.conflict-pair { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.conflict-side { min-width: 0; padding: 9px 11px; border-radius: 6px; background: #f8fafc; }
+.conflict-side h5 { margin: 0 0 4px; font: 700 11px "Manrope", sans-serif; }
+.conflict-side p { margin: 6px 0 0; color: #566377; font-size: 11px; line-height: 1.55; }
+.conflict-side .answer-text { color: #344760; }
+.conflict-side u { text-decoration: underline; }
+@media (max-width: 800px) { .conflict-pair { grid-template-columns: 1fr; } }
+.label-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .label-actions [aria-pressed="true"] { color: #fff; border-color: var(--blue); background: var(--blue); }
+
+.rerun-panel { display: grid; gap: 9px; margin-top: 14px; padding-top: 14px; border-top: 1px solid #edf0f4; }
+.rerun-panel p { margin: 0; font-size: 11px; line-height: 1.55; }
+.rerun-panel .inline-check { display: flex; align-items: flex-start; gap: 7px; font-size: 11px; }
+.rerun-panel button { justify-self: start; }

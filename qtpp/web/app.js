@@ -185,7 +185,17 @@ function currentTemplateFromForm() {
     quotas,
     allowed_patterns: patterns,
     leftover_bounds: leftoverBounds,
+    ...separationFromForm(),
   };
+}
+
+function separationFromForm() {
+  const window_ = Number(byId("sep-window").value);
+  if (!window_ || window_ < 1) return {};
+  const by_category = byId("sep-category").checked;
+  const by_subcategory = byId("sep-subcategory").checked;
+  if (!by_category && !by_subcategory) throw new Error("Separation needs category and/or subcategory.");
+  return { separation: { window: window_, by_category, by_subcategory } };
 }
 
 function loadTemplateForm(template) {
@@ -206,6 +216,9 @@ function loadTemplateForm(template) {
   const bonus = leftovers.find((item) => item.question_type === "bonus");
   byId("leftover-tu").value = tu?.maximum ?? "";
   byId("leftover-bonus").value = bonus?.maximum ?? "";
+  byId("sep-window").value = template.separation?.window ?? 0;
+  byId("sep-category").checked = template.separation?.by_category ?? true;
+  byId("sep-subcategory").checked = template.separation?.by_subcategory ?? false;
   updateChrome();
 }
 
@@ -375,6 +388,7 @@ function applyCategoryRows() {
       { question_type: "tossup", minimum: 0, maximum: byId("leftover-tu").value === "" ? null : Number(byId("leftover-tu").value) },
       { question_type: "bonus", minimum: 0, maximum: byId("leftover-bonus").value === "" ? null : Number(byId("leftover-bonus").value) },
     ],
+    ...separationFromForm(),
   };
   loadTemplateForm(template);
   byId("template-select").value = "";
@@ -694,6 +708,14 @@ function renderQuestionCell(id, index, type, packetIndex, questions) {
     </div></div>`;
 }
 
+function renderConflictSide(question) {
+  const heading = `${question.type === "tossup" ? "Tossup" : "Bonus"} ${question.number}`;
+  const body = question.type === "tossup"
+    ? `<p>${formatText(question.question)}</p><p class="answer-text"><b>ANSWER:</b> ${formatText(question.answer)}</p>`
+    : `<p>${formatText(question.leadin)}</p>${question.parts.map((part, index) => `<p><b>[${index + 1}]</b> ${formatText(part.question)}</p><p class="answer-text"><b>ANSWER:</b> ${formatText(part.answer)}</p>`).join("")}`;
+  return `<div class="conflict-side"><h5>${heading}</h5><span class="topic-tag">${escapeHtml(question.category)} / ${escapeHtml(question.subcategory)}</span>${body}</div>`;
+}
+
 function renderAudit(result) {
   const host = byId("audit-results");
   if (result.needs_clarification) {
@@ -720,8 +742,9 @@ function renderAudit(result) {
   const conflicts = result.likely_conflicts.length
     ? `<div class="conflict-list">${result.likely_conflicts.map((item) => `
       <div class="conflict-row"><strong>Packet ${item.packet}</strong>
-        <span>${escapeHtml(item.first_id)} ↔ ${escapeHtml(item.second_id)} · ${escapeHtml(item.reason)}</span>
+        <span>${escapeHtml(item.reason)}</span>
         <em>${Number(item.similarity).toFixed(3)}</em>
+        <div class="conflict-pair">${renderConflictSide(item.first)}${renderConflictSide(item.second)}</div>
         <div class="label-actions" role="group" aria-label="Your judgment of this pair" data-first="${escapeHtml(item.first_id)}" data-second="${escapeHtml(item.second_id)}">
           ${[["similar", "Too similar"], ["different", "Fine together"], ["borderline", "Unsure"]].map(([value, text]) =>
             `<button type="button" class="button small secondary" data-label="${value}" aria-pressed="${item.saved_label === value}">${text}</button>`).join("")}
@@ -732,6 +755,12 @@ function renderAudit(result) {
     <article class="card audit-card"><h3>Likely conflicts to review</h3>
       <p>Top pairwise similarity candidates and adjacent same-category tossups. These are review signals, not automatic errors. Your judgments are saved to <code>calibration/labels.jsonl</code> (IDs and hashes only, no question text) to calibrate similarity scorers over time.</p>
       ${conflicts}
+      <div class="rerun-panel">
+        <p><strong>Fix flagged pairs.</strong> Re-run the same builds with your saved judgments: “Too similar” pairs are penalized heavily so solvers keep them apart, and “Fine together” pairs stop counting. Every saved judgment that matches this pool is used, including the committed cache.</p>
+        <label class="inline-check"><input type="checkbox" id="rerun-separate"> Never place flagged pairs in the same packet (CP-SAT enforces this exactly; the baseline solver avoids it strongly)</label>
+        <button type="button" class="button primary" id="rerun-builds">Re-run builds with my judgments</button>
+        <div id="rerun-summary" aria-live="polite"></div>
+      </div>
     </article>`;
 }
 
@@ -1188,6 +1217,29 @@ byId("audit-results").addEventListener("click", async (event) => {
     group.querySelectorAll("[data-label]").forEach((other) => other.setAttribute("aria-pressed", String(other === button)));
     status.textContent = "Saved";
   } catch (error) { setNotice(error.message, "error"); }
+});
+byId("audit-results").addEventListener("click", async (event) => {
+  const button = event.target.closest("#rerun-builds");
+  if (!button) return;
+  if (state.dirty && !window.confirm("Re-running discards unrecalculated placement edits. Continue?")) return;
+  const separate = byId("rerun-separate").checked;
+  setBusy(button, true, "Re-running…");
+  const timer = startProgress("Re-running builds with your judgments", ["Rebuilding and re-scoring all selected solvers"]);
+  try {
+    const payload = await api("/api/rerun", { separate_flagged: separate });
+    updateRunState(payload);
+    const result = await api("/api/audit", { request: byId("audit-request").value });
+    renderAudit(result);
+    const info = payload.rerun;
+    const tone = info.flagged_after === 0 ? "good" : "warn";
+    byId("rerun-summary").innerHTML = `<div class="review-banner ${tone}"><strong>Re-run complete.</strong>
+      Applied ${plural(info.similar_labels, "“too similar” judgment")} and ${plural(info.different_labels, "“fine together” judgment")}.
+      Flagged pairs sharing a packet: ${info.flagged_before} before → ${info.flagged_after} after.
+      ${info.flagged_after ? "Some remain; try the hard-separation option or add more judgments." : ""}
+      Review the new placements on the Review page.</div>`;
+    setNotice("Builds re-run with your judgments.", "success");
+  } catch (error) { setNotice(error.message, "error"); }
+  finally { stopProgress(timer); setBusy(button, false); updateChrome(); }
 });
 byId("export-packets").addEventListener("click", async (event) => {
   const button = event.currentTarget;

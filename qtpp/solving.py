@@ -4,7 +4,12 @@ import random
 from dataclasses import dataclass, field, replace
 from typing import Mapping, Sequence
 
-from .build_spec import CountSelector, PacketBuildSpec, validate_distribution
+from .build_spec import (
+    CountSelector,
+    PacketBuildSpec,
+    TossupBonusSeparation,
+    validate_distribution,
+)
 from .model import QuestionSet
 from .scoring import PacketLayout, SoftScore, SoftWeights, score_layouts
 from .similarity import PairScorer
@@ -59,6 +64,33 @@ class PoolIndex:
         )
 
 
+def separation_conflicts(
+    tossups: Sequence[str],
+    bonuses: Sequence[str],
+    selector_of: Mapping[str, CountSelector],
+    separation: TossupBonusSeparation,
+) -> list[tuple[int, int]]:
+    """1-based (tossup, bonus) positions that share a topic within the window."""
+
+    def keys(question_id: str) -> tuple[str, tuple[str, str | None]]:
+        selector = selector_of[question_id]
+        return selector.category, (selector.category, selector.subcategory)
+
+    tossup_keys = [keys(question_id) for question_id in tossups]
+    bonus_keys = [keys(question_id) for question_id in bonuses]
+    conflicts = []
+    for t, (t_category, t_sub) in enumerate(tossup_keys):
+        for b in range(
+            max(0, t - separation.window), min(len(bonus_keys), t + separation.window + 1)
+        ):
+            b_category, b_sub = bonus_keys[b]
+            if (separation.by_category and t_category == b_category) or (
+                separation.by_subcategory and t_sub == b_sub
+            ):
+                conflicts.append((t + 1, b + 1))
+    return conflicts
+
+
 def validate_layouts(
     index: PoolIndex, spec: PacketBuildSpec, layouts: Sequence[PacketLayout]
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
@@ -86,6 +118,18 @@ def validate_layouts(
         "bonus": sum(1 for question_id in leftover_ids if index.selector_of[question_id].question_type == "bonus"),
     }
     errors.extend(validate_distribution(spec, packet_counts, leftovers))
+    if spec.separation is not None:
+        for number, layout in enumerate(layouts, start=1):
+            if any(q not in index.selector_of for q in (*layout.tossups, *layout.bonuses)):
+                continue
+            for t, b in separation_conflicts(
+                layout.tossups, layout.bonuses, index.selector_of, spec.separation
+            ):
+                errors.append(
+                    f"packet {number}: tossup {t} and bonus {b} share a "
+                    f"{'category' if spec.separation.by_category else 'subcategory'}"
+                    f" within a window of {spec.separation.window}"
+                )
     return tuple(errors), leftover_ids
 
 
@@ -116,8 +160,19 @@ def optimize_order(
     weights: SoftWeights,
     rng: random.Random,
     passes: int = 400,
+    *,
+    separation: TossupBonusSeparation | None = None,
+    selector_of: Mapping[str, CountSelector] | None = None,
 ) -> PacketLayout:
-    """Hill-climb question order within a packet; membership never changes."""
+    """Hill-climb question order within a packet; membership never changes.
+
+    With ``separation``, tossup/bonus topic conflicts are minimized first (with
+    restarts) and the soft penalty second.
+    """
+    if separation is not None and selector_of is not None:
+        return _optimize_separated(
+            layout, categories, scorer, weights, rng, passes, separation, selector_of
+        )
     sequences = [list(layout.tossups), list(layout.bonuses)]
     for kind, sequence in enumerate(sequences):
         if len(sequence) < 2:
@@ -132,6 +187,51 @@ def optimize_order(
             else:
                 sequence[first], sequence[second] = sequence[second], sequence[first]
     return replace(layout, tossups=tuple(sequences[0]), bonuses=tuple(sequences[1]))
+
+
+def _optimize_separated(
+    layout: PacketLayout,
+    categories: Mapping[str, str],
+    scorer: PairScorer,
+    weights: SoftWeights,
+    rng: random.Random,
+    passes: int,
+    separation: TossupBonusSeparation,
+    selector_of: Mapping[str, CountSelector],
+    restarts: int = 20,
+) -> PacketLayout:
+    def cost(sequences: list[list[str]]) -> tuple[int, float]:
+        conflicts = len(separation_conflicts(sequences[0], sequences[1], selector_of, separation))
+        soft = order_penalty(sequences[0], categories, scorer, weights, adjacency=True)
+        soft += order_penalty(sequences[1], categories, scorer, weights, adjacency=False)
+        return conflicts, soft
+
+    best: list[list[str]] | None = None
+    best_cost = (0, 0.0)
+    for attempt in range(restarts):
+        sequences = [list(layout.tossups), list(layout.bonuses)]
+        if attempt:
+            for sequence in sequences:
+                rng.shuffle(sequence)
+        current = cost(sequences)
+        for _ in range(passes * 3):
+            kind = rng.randrange(2)
+            sequence = sequences[kind]
+            if len(sequence) < 2:
+                continue
+            first, second = rng.sample(range(len(sequence)), 2)
+            sequence[first], sequence[second] = sequence[second], sequence[first]
+            candidate = cost(sequences)
+            if candidate < current:
+                current = candidate
+            else:
+                sequence[first], sequence[second] = sequence[second], sequence[first]
+        if best is None or current < best_cost:
+            best, best_cost = [list(s) for s in sequences], current
+        if best_cost[0] == 0:
+            break
+    assert best is not None
+    return replace(layout, tossups=tuple(best[0]), bonuses=tuple(best[1]))
 
 
 def finish_result(

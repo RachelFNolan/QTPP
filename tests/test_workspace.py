@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 from urllib.request import Request, urlopen
 
+from qtpp import cpsat_solver
 from qtpp.json_import import load_question_set
 from qtpp.model import (
     Bonus,
@@ -87,6 +88,42 @@ class WorkspaceTests(unittest.TestCase):
             self.workspace.label_pair({"first_id": "tu-1", "second_id": "tu-1", "label": "similar"})
         with self.assertRaises(WorkspaceError):
             self.workspace.label_pair({"first_id": "tu-1", "second_id": "b-1", "label": "maybe"})
+
+    def _flag_top_conflicts(self, solver: str) -> None:
+        self.workspace.import_demo()
+        template = {**tiny_template(), "tossup_capacity": 3, "bonus_capacity": 3, "leftover_bounds": []}
+        self.workspace.generate(
+            {
+                "template": template,
+                "packet_count": 2,
+                "solvers": [solver],
+                "similarities": ["balanced-tfidf"],
+                "baseline_samples": 3,
+            }
+        )
+        for conflict in self.workspace.audit("")["likely_conflicts"][:3]:
+            self.workspace.label_pair(
+                {"first_id": conflict["first_id"], "second_id": conflict["second_id"], "label": "similar"}
+            )
+
+    def test_rerun_requires_a_build(self) -> None:
+        with self.assertRaises(WorkspaceError):
+            self.workspace.rerun({})
+
+    def test_rerun_with_judgments_separates_flagged_pairs(self) -> None:
+        self._flag_top_conflicts("baseline")
+        result = self.workspace.rerun({"separate_flagged": False})
+        info = result["rerun"]
+        self.assertEqual(info["similar_labels"], 3)
+        self.assertEqual((info["flagged_before"], info["flagged_after"]), (3, 0))
+        self.assertTrue(result["judgments"]["use_judgments"])
+        self.assertEqual(result["draft"]["report"]["hard_errors"], [])
+
+    @unittest.skipIf(cpsat_solver.cp_model is None, "OR-Tools is not installed")
+    def test_rerun_hard_separation_with_cpsat(self) -> None:
+        self._flag_top_conflicts("cpsat")
+        info = self.workspace.rerun({"separate_flagged": True})["rerun"]
+        self.assertEqual(info["flagged_after"], 0)
 
     def test_comparison_review_audit_and_export_round_trip(self) -> None:
         result = self.workspace.generate(

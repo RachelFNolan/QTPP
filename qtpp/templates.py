@@ -10,6 +10,7 @@ from .build_spec import (
     CategoryQuota,
     LeftoverBound,
     PacketBuildSpec,
+    TossupBonusSeparation,
 )
 
 
@@ -26,6 +27,7 @@ class BuildTemplate:
         LeftoverBound("tossup"),
         LeftoverBound("bonus"),
     )
+    separation: TossupBonusSeparation | None = None
 
     def create_spec(
         self,
@@ -41,4 +43,5 @@ class BuildTemplate:
             allowed_patterns=self.allowed_patterns,
             aggregate_quotas=aggregate_quotas,
             leftover_bounds=self.leftover_bounds,
+            separation=self.separation,
         )

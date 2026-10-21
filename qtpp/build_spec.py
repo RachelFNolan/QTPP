@@ -194,6 +194,22 @@ class LeftoverBound:
 
 
 @dataclass(frozen=True, slots=True)
+class TossupBonusSeparation:
+    """Within a packet, a tossup and a bonus sharing a category (and/or
+    subcategory) must be more than ``window`` positions apart."""
+
+    window: int
+    by_category: bool = True
+    by_subcategory: bool = False
+
+    def __post_init__(self) -> None:
+        if not _positive_int(self.window):
+            raise ValueError("separation window must be a positive integer")
+        if not (self.by_category or self.by_subcategory):
+            raise ValueError("separation must apply to categories and/or subcategories")
+
+
+@dataclass(frozen=True, slots=True)
 class PacketBuildSpec:
     packet_count: int
     tossup_capacity: int
@@ -209,6 +225,7 @@ class PacketBuildSpec:
             LeftoverBound("bonus"),
         )
     )
+    separation: TossupBonusSeparation | None = None
 
     def __post_init__(self) -> None:
         if not _positive_int(self.packet_count):

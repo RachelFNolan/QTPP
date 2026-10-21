@@ -56,7 +56,8 @@ def solve_baseline(
     accepted = _local_search(index, tossups, bonuses, scorer, weights, rng, iterations)
     layouts = [
         optimize_order(
-            PacketLayout(tuple(t), tuple(b)), index.category_of, scorer, weights, rng
+            PacketLayout(tuple(t), tuple(b)), index.category_of, scorer, weights, rng,
+            separation=spec.separation, selector_of=index.selector_of,
         )
         for t, b in zip(tossups, bonuses)
     ]
@@ -86,7 +87,8 @@ def construct_random(
             continue
         tossups, bonuses = _assign(profiles, index, rng)
         layouts = [PacketLayout(tuple(t), tuple(b)) for t, b in zip(tossups, bonuses)]
-        errors, _ = validate_layouts(index, spec, layouts)
+        # Separation depends on ordering, which is optimized afterwards.
+        errors, _ = validate_layouts(index, replace(spec, separation=None), layouts)
         if not errors:
             return tossups, bonuses, attempts
     raise InfeasibleError(

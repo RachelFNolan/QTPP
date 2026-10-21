@@ -12,6 +12,7 @@ from .build_spec import (
     CategoryQuota,
     CountSelector,
     LeftoverBound,
+    TossupBonusSeparation,
 )
 from .templates import BuildTemplate
 
@@ -48,6 +49,17 @@ def template_to_dict(template: BuildTemplate) -> dict[str, Any]:
             }
             for bound in template.leftover_bounds
         ],
+        **(
+            {
+                "separation": {
+                    "window": template.separation.window,
+                    "by_category": template.separation.by_category,
+                    "by_subcategory": template.separation.by_subcategory,
+                }
+            }
+            if template.separation
+            else {}
+        ),
     }
 
 
@@ -80,6 +92,13 @@ def template_from_dict(data: dict[str, Any]) -> BuildTemplate:
             for item in data.get("leftover_bounds", [])
         )
         kwargs: dict[str, Any] = {"leftover_bounds": leftovers} if "leftover_bounds" in data else {}
+        raw_separation = data.get("separation")
+        if raw_separation is not None:
+            kwargs["separation"] = TossupBonusSeparation(
+                window=raw_separation["window"],
+                by_category=raw_separation.get("by_category", True),
+                by_subcategory=raw_separation.get("by_subcategory", False),
+            )
         return BuildTemplate(
             name=data["name"],
             tossup_capacity=data["tossup_capacity"],

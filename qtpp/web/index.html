@@ -171,6 +171,13 @@
               <div class="field-row"><label for="leftover-tu">Allowed leftover tossups (max)</label><input id="leftover-tu" type="number" min="0"></div>
               <div class="field-row"><label for="leftover-bonus">Allowed leftover bonuses (max)</label><input id="leftover-bonus" type="number" min="0"></div>
             </div>
+            <fieldset class="field-grid two separation-grid">
+              <legend class="small">Tossup–bonus separation (hard rule)</legend>
+              <div class="field-row"><label for="sep-window">Window (0 = off)</label><input id="sep-window" type="number" min="0" value="0"></div>
+              <div class="field-row"><label><input id="sep-category" type="checkbox" checked> Same category</label>
+                <label><input id="sep-subcategory" type="checkbox"> Same subcategory</label></div>
+              <p class="small muted-text">A bonus may not share the chosen topic with any tossup within this many positions in the same packet.</p>
+            </fieldset>
             <div class="actions">
               <button id="save-template" class="button secondary">Download template JSON</button>
               <label class="button secondary file-button" for="template-file">Import template JSON</label>

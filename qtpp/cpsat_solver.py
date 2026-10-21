@@ -3,6 +3,7 @@ from __future__ import annotations
 import random
 import time
 from itertools import combinations
+from typing import Iterable
 
 from .build_spec import (
     AllowedCountPatterns,
@@ -41,12 +42,13 @@ def solve_cpsat(
     time_limit: float = 30.0,
     top_pairs: int = 1500,
     workers: int = 1,
+    separate: Iterable[tuple[str, str]] = (),
 ) -> SolverResult:
     """OR-Tools CP-SAT solver.
 
     Hard rules are exact constraints. The objective penalizes the most similar
     pairs placed in the same packet; ordering within packets is then optimized
-    with the shared local search.
+    with the shared local search. ``separate`` pairs may never share a packet.
     """
     if cp_model is None:
         raise RuntimeError("cpsat_solver requires ortools: pip install -r requirements-dev.txt")
@@ -179,6 +181,11 @@ def solve_cpsat(
         if bound.maximum is not None:
             model.Add(leftover <= bound.maximum)
 
+    for a, b in separate:
+        if (a, 0) in x and (b, 0) in x:
+            for p in packets:
+                model.Add(x[a, p] + x[b, p] <= 1)
+
     pair_scores = sorted(
         (
             (scorer.score(a, b), a, b)
@@ -215,7 +222,8 @@ def solve_cpsat(
         bonuses = tuple(q for q in index.bonus_ids if solver.BooleanValue(x[q, p]))
         layouts.append(
             optimize_order(
-                PacketLayout(tossups, bonuses), index.category_of, scorer, weights, rng
+                PacketLayout(tossups, bonuses), index.category_of, scorer, weights, rng,
+                separation=spec.separation, selector_of=index.selector_of,
             )
         )
     return finish_result(
