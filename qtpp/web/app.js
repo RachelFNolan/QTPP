@@ -98,9 +98,16 @@ function poolLoaded(pool) {
       <span class="stat-chip">${pool.bonus_count.toLocaleString()} bonuses</span>
       <span class="stat-chip">${escapeHtml(pool.metadata.year ?? "Year unknown")}</span>
     </div>
-    <div class="category-wrap">${Object.entries(pool.categories).map(([category, subs]) =>
-      `<span class="category-chip">${escapeHtml(category)} · ${subs.length} subcategories</span>`
-    ).join("")}</div>`;
+    <div class="audit-table-wrap category-table-wrap">
+      <table class="audit-table category-table">
+        <thead><tr><th>Category</th><th class="num">Tossups</th><th class="num">Bonuses</th><th class="num">Subcategories</th><th>Subcategory list</th></tr></thead>
+        <tbody>${Object.entries(pool.categories).map(([category, subs]) => {
+          const counts = (pool.category_counts || {})[category] || { tossups: 0, bonuses: 0 };
+          return `<tr><td><strong>${escapeHtml(category)}</strong></td><td class="num">${counts.tossups}</td><td class="num">${counts.bonuses}</td><td class="num">${subs.length}</td><td class="wrap">${subs.map(escapeHtml).join(", ")}</td></tr>`;
+        }).join("")}</tbody>
+        <tfoot><tr><td>Total</td><td class="num">${pool.tossup_count}</td><td class="num">${pool.bonus_count}</td><td class="num"></td><td></td></tr></tfoot>
+      </table>
+    </div>`;
   const categories = Object.keys(pool.categories);
   byId("category-options").innerHTML = categories.map((name) => `<option value="${escapeHtml(name)}"></option>`).join("");
   byId("subcategory-options").innerHTML = [...new Set(Object.values(pool.categories).flat())]
@@ -394,8 +401,11 @@ byId("import-csv").addEventListener("click", async (event) => {
   if (!state.selectedFile) return;
   setBusy(button, true, "Importing…");
   try {
-    const csv = await state.selectedFile.text();
-    const pool = await api("/api/import", { csv, filename: state.selectedFile.name });
+    const content = await state.selectedFile.text();
+    const isJson = /\.json$/i.test(state.selectedFile.name);
+    const pool = isJson
+      ? await api("/api/import-json", { json: content, filename: state.selectedFile.name })
+      : await api("/api/import", { csv: content, filename: state.selectedFile.name });
     poolLoaded(pool);
     setNotice(`Imported ${pool.tossup_count} tossups and ${pool.bonus_count} bonuses.`, "success");
   } catch (error) { setNotice(error.message, "error"); }

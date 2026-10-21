@@ -38,6 +38,16 @@ The importer validates packet/set consistency and bonus part-array alignment, an
 
 The packet JSON files in [`Test Questions/2025 ACF Fall`](./Test%20Questions/2025%20ACF%20Fall) were exported from the [QBReader 2025 ACF Fall set](https://www.qbreader.org/db/set/?_id=68fc54d55b5d7bee38aa3e0a). Load the directory with `load_question_set` in the same way as the Winter example.
 
+## Importing a raw JSON question pool
+
+```python
+from qtpp import load_question_pool_json
+
+pool = load_question_pool_json("my-questions.json")  # no packets
+```
+
+The file may be `{"set": {...}, "tossups": [...], "bonuses": [...]}` or a bare list of questions (bonuses are recognized by `leadin`/`parts`). Questions use the same fields as packet JSON (`_id`, `question`, `answer`, `category`, `subcategory`, bonus `leadin`/`parts`/`answers`/`values`/`difficultyModifiers`, optional sanitized fields), but `packet` and `number` are not needed. The set record comes from the top-level `set`, else the first question's `set`, else defaults from the file name (`year` defaults to the current year). The local web app's Import view accepts `.json` as well as `.csv`.
+
 ## Combined question pool
 
 The supplied `Test Questions/2025 ACF Winter` set has a combined CSV at

@@ -126,6 +126,19 @@ class Workspace:
             temporary_path.unlink(missing_ok=True)
         return self._set_pool(pool)
 
+    def import_json(self, content: str, filename: str = "question-pool.json") -> dict[str, Any]:
+        from .pool_json_import import parse_question_pool_json
+
+        if not isinstance(content, str) or not content.strip():
+            raise WorkspaceError("Choose a non-empty JSON file.")
+        if not isinstance(filename, str) or not filename:
+            filename = "question-pool.json"
+        try:
+            pool = parse_question_pool_json(content, filename)
+        except (OSError, ValueError) as error:
+            raise WorkspaceError(str(error)) from error
+        return self._set_pool(pool)
+
     @staticmethod
     def _load_csv_path(path: Path) -> QuestionSet:
         from .csv_import import load_question_pool_csv
@@ -149,9 +162,13 @@ class Workspace:
         with self._lock:
             pool = self._require_pool()
             categories: dict[str, set[str]] = {}
-            for question in (*pool.tossups, *pool.bonuses):
-                topic = question.metadata.topic
-                categories.setdefault(topic.category, set()).add(topic.subcategory)
+            counts: dict[str, dict[str, int]] = {}
+            for kind, questions in (("tossups", pool.tossups), ("bonuses", pool.bonuses)):
+                for question in questions:
+                    topic = question.metadata.topic
+                    categories.setdefault(topic.category, set()).add(topic.subcategory)
+                    entry = counts.setdefault(topic.category, {"tossups": 0, "bonuses": 0})
+                    entry[kind] += 1
             return {
                 "metadata": {
                     "id": pool.metadata.id,
@@ -165,6 +182,7 @@ class Workspace:
                     category: sorted(subcategories)
                     for category, subcategories in sorted(categories.items())
                 },
+                "category_counts": {category: counts[category] for category in sorted(counts)},
             }
 
     def generate(self, request: Mapping[str, Any]) -> dict[str, Any]:

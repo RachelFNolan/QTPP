@@ -15,6 +15,7 @@ from .feasibility import check_pool_feasibility, max_feasible_packets, pool_coun
 from .baseline_solver import solve_baseline
 from .cpsat_solver import solve_cpsat
 from .json_import import load_question_set
+from .pool_json_import import load_question_pool_json, parse_question_pool_json
 from .generation import GeneratedPackets, GenerationReport, build_question_set, generate_packets
 from .json_export import export_packets, packet_filename, packet_to_dict
 from .document import (
@@ -141,6 +142,8 @@ __all__ = [
     "pool_counts",
     "load_question_pool_csv",
     "load_question_set",
+    "load_question_pool_json",
+    "parse_question_pool_json",
     "validate_distribution",
     "load_template",
     "save_template",

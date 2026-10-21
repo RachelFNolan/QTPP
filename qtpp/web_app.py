@@ -45,6 +45,10 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                 result = self.workspace.import_csv(
                     payload.get("csv", ""), payload.get("filename", "question-pool.csv")
                 )
+            elif route == "/api/import-json":
+                result = self.workspace.import_json(
+                    payload.get("json", ""), payload.get("filename", "question-pool.json")
+                )
             elif route == "/api/demo":
                 result = self.workspace.import_demo()
             elif route == "/api/generate":

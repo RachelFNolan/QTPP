@@ -167,6 +167,10 @@ input:focus, select:focus, textarea:focus { border-color: #7ca7eb; box-shadow: 0
 .audit-card h3 { margin-bottom: 9px; }
 .audit-card p { color: var(--muted); font-size: 11px; line-height: 1.6; }
 .audit-table-wrap { overflow-x: auto; }
+.category-table-wrap { margin-top: 14px; }
+.category-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.category-table td.wrap { white-space: normal; color: #78859a; min-width: 220px; }
+.category-table tfoot td { font-weight: 600; border-top: 2px solid #dde3ea; border-bottom: 0; }
 .audit-table { width: 100%; border-collapse: collapse; font-size: 10px; }
 .audit-table th, .audit-table td { padding: 9px 7px; border-bottom: 1px solid #edf0f4; text-align: left; white-space: nowrap; }
 .audit-table th { color: #78859a; font-weight: 600; }
