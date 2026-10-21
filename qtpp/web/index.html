@@ -16,13 +16,17 @@
       </a>
       <div class="local-note"><span class="status-dot"></span> Local workspace</div>
       <nav aria-label="Workspace">
-        <button class="nav-item active" data-view="import"><span>01</span> Import</button>
-        <button class="nav-item" data-view="configure"><span>02</span> Configure</button>
-        <button class="nav-item" data-view="compare"><span>03</span> Compare</button>
-        <button class="nav-item" data-view="review"><span>04</span> Review</button>
-        <button class="nav-item" data-view="audit"><span>05</span> Audit</button>
-        <button class="nav-item" data-view="export"><span>06</span> Export</button>
+        <button class="nav-item active" aria-current="page" data-view="import"><span class="nav-num">01</span><span class="nav-text"><b>Import</b><small class="nav-hint" id="hint-import"></small></span><i class="nav-state" aria-hidden="true"></i></button>
+        <button class="nav-item" data-view="configure"><span class="nav-num">02</span><span class="nav-text"><b>Configure</b><small class="nav-hint" id="hint-configure"></small></span><i class="nav-state" aria-hidden="true"></i></button>
+        <button class="nav-item" data-view="compare"><span class="nav-num">03</span><span class="nav-text"><b>Compare</b><small class="nav-hint" id="hint-compare"></small></span><i class="nav-state" aria-hidden="true"></i></button>
+        <button class="nav-item" data-view="review"><span class="nav-num">04</span><span class="nav-text"><b>Review</b><small class="nav-hint" id="hint-review"></small></span><i class="nav-state" aria-hidden="true"></i></button>
+        <button class="nav-item" data-view="audit"><span class="nav-num">05</span><span class="nav-text"><b>Audit</b><small class="nav-hint" id="hint-audit"></small></span><i class="nav-state" aria-hidden="true"></i></button>
+        <button class="nav-item" data-view="export"><span class="nav-num">06</span><span class="nav-text"><b>Export</b><small class="nav-hint" id="hint-export"></small></span><i class="nav-state" aria-hidden="true"></i></button>
       </nav>
+      <details class="summary-pane" open>
+        <summary>Workspace summary</summary>
+        <div id="summary-body" aria-live="polite"></div>
+      </details>
       <div class="sidebar-footer">
         <p>Question pools and drafts stay in this local session.</p>
         <a href="/README.md" target="_blank" rel="noreferrer">Project guide ↗</a>
@@ -33,14 +37,15 @@
       <header class="topbar">
         <div>
           <p class="eyebrow">QUESTION POOL TO PACKETS</p>
-          <h1 id="page-title">Import a question pool</h1>
+          <h1 id="page-title" tabindex="-1">Import a question pool</h1>
         </div>
         <div class="topbar-right">
           <span id="pool-pill" class="pill muted">No pool loaded</span>
           <span class="privacy-label">Runs on this computer</span>
         </div>
       </header>
-      <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+      <div id="notice" class="notice" role="status" aria-live="polite" hidden><span id="notice-text"></span><button type="button" id="notice-close" aria-label="Dismiss message">×</button></div>
+      <div id="progress" class="progress-panel" role="status" aria-live="polite" hidden></div>
       <div id="demo-guide" class="demo-guide" hidden></div>
 
       <section class="view active" id="view-import">
@@ -54,6 +59,7 @@
               <input id="csv-file" type="file" accept=".csv,text/csv,.json,application/json">
               <button id="import-csv" class="button secondary" disabled>Import selected file</button>
             </div>
+            <p id="selected-file" class="drop-hint">or drag and drop a CSV or JSON file here</p>
             <button id="load-demo" class="text-button">Try the guided sample workflow <span aria-hidden="true">→</span></button>
           </article>
           <article class="card info-card">
@@ -65,9 +71,11 @@
           </article>
         </div>
         <article id="pool-summary" class="card pool-card" hidden></article>
+        <nav class="page-nav" aria-label="Step navigation"><span></span><span class="page-nav-hint"></span><button type="button" class="button primary" data-go="configure" data-requires="pool">Next: Configure →</button></nav>
       </section>
 
       <section class="view" id="view-configure">
+        <div class="empty-state" id="empty-configure" data-view-name="configure" hidden></div>
         <div class="section-heading">
           <div><p class="eyebrow">BUILD RULES</p><h2>Configure packets</h2></div>
           <div class="actions">
@@ -173,15 +181,18 @@
             <p class="eyebrow">BUILD SIZE</p>
             <div class="field-row"><label for="packet-count">Number of packets</label><input id="packet-count" type="number" value="1" min="1"></div>
             <div class="field-row"><label for="seed">Repeatable seed</label><input id="seed" type="number" value="0"></div>
+            <div id="form-issues" class="hint-box issues" role="alert" hidden></div>
             <div id="feasibility" class="hint-box feasibility" aria-live="polite">Import a pool to check feasibility.</div>
             <div id="config-pool-hint" class="hint-box">Import a pool to see its category and subcategory values.</div>
             <p class="small muted-text">Hard constraints are validated before export. Leftover questions remain unassigned in the pool.</p>
             <button class="button primary full" data-go="compare">Continue to compare <span aria-hidden="true">→</span></button>
           </aside>
         </div>
+        <nav class="page-nav" aria-label="Step navigation"><button type="button" class="button secondary" data-go="import">← Back: Import</button><span class="page-nav-hint"></span><button type="button" class="button primary" data-go="compare">Next: Compare →</button></nav>
       </section>
 
       <section class="view" id="view-compare">
+        <div class="empty-state" id="empty-compare" data-view-name="compare" hidden></div>
         <div class="section-heading">
           <div><p class="eyebrow">GENERATION OPTIONS</p><h2>Compare build approaches</h2></div>
           <button id="run-build" class="button primary">Run selected builds</button>
@@ -208,20 +219,29 @@
             <div class="field-row"><label for="weight-nearby">Nearby similarity</label><input id="weight-nearby" type="number" min="0" step="0.1" value="3"></div>
             <div class="field-row"><label for="weight-window">Nearby window</label><input id="weight-window" type="number" min="1" step="1" value="3"></div>
           </div>
+          <div class="field-grid four baseline-field">
+            <div class="field-row"><label for="baseline-samples">Random baseline samples</label><input id="baseline-samples" type="number" min="1" max="500" step="1" value="30" aria-describedby="baseline-help"><small id="baseline-help" class="small muted-text">Random valid layouts used to compute “% better than random”. More samples are steadier but slower.</small></div>
+          </div>
         </article>
+        <section id="comparison-explainer" class="card explainer-card" hidden></section>
+        <p id="build-gate" class="gate-note" hidden></p>
         <div id="comparison-results" class="results-grid"></div>
+        <nav class="page-nav" aria-label="Step navigation"><button type="button" class="button secondary" data-go="configure">← Back: Configure</button><span class="page-nav-hint"></span><button type="button" class="button primary" data-go="review" data-requires="build">Next: Review →</button></nav>
       </section>
 
       <section class="view" id="view-review">
+        <div class="empty-state" id="empty-review" data-view-name="review" hidden></div>
         <div class="section-heading">
           <div><p class="eyebrow">DRAFT PACKETS</p><h2>Review and arrange</h2></div>
           <button id="apply-review" class="button primary">Recalculate and validate</button>
         </div>
         <div id="review-summary"></div>
         <div id="packet-list" class="packet-list"></div>
+        <nav class="page-nav" aria-label="Step navigation"><button type="button" class="button secondary" data-go="compare">← Back: Compare</button><span class="page-nav-hint"></span><button type="button" class="button primary" data-go="audit" data-requires="build">Next: Audit →</button></nav>
       </section>
 
       <section class="view" id="view-audit">
+        <div class="empty-state" id="empty-audit" data-view-name="audit" hidden></div>
         <div class="section-heading">
           <div><p class="eyebrow">EVIDENCE BEFORE EXPORT</p><h2>Audit this draft</h2></div>
         </div>
@@ -234,9 +254,11 @@
           <p class="small muted-text">Requests are interpreted locally from available categories and text-derived dates. Findings are comparative, not automatic hard rules.</p>
         </article>
         <div id="audit-results"></div>
+        <nav class="page-nav" aria-label="Step navigation"><button type="button" class="button secondary" data-go="review">← Back: Review</button><span class="page-nav-hint"></span><button type="button" class="button primary" data-go="export" data-requires="build">Next: Export →</button></nav>
       </section>
 
       <section class="view" id="view-export">
+        <div class="empty-state" id="empty-export" data-view-name="export" hidden></div>
         <div class="section-heading">
           <div><p class="eyebrow">FINAL OUTPUT</p><h2>Export packet JSON</h2></div>
           <button id="export-packets" class="button primary">Download packet files</button>
@@ -246,6 +268,7 @@
           <p>Each packet is downloaded as an individual JSON file. Export is blocked only when a hard rule is invalid or a packet is empty.</p>
           <p class="small muted-text">User-created templates are portable JSON files. Drafts remain in this browser session and can be exported again while the workspace is open.</p>
         </div>
+        <nav class="page-nav" aria-label="Step navigation"><button type="button" class="button secondary" data-go="audit">← Back: Audit</button><span class="page-nav-hint"></span></nav>
       </section>
 
       <footer class="app-footer"><span>QTPP local packet workspace</span><span>CSV in · reviewed JSON out</span></footer>

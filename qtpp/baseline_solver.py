@@ -51,22 +51,7 @@ def solve_baseline(
     scorer = CachedScorer(scorer)
     rng = random.Random(seed)
 
-    tossups: list[list[str]] = []
-    bonuses: list[list[str]] = []
-    attempts = 0
-    for attempts in range(1, max_attempts + 1):
-        profiles = _sample_profiles(spec, index, rng)
-        if profiles is None:
-            continue
-        tossups, bonuses = _assign(profiles, index, rng)
-        layouts = [PacketLayout(tuple(t), tuple(b)) for t, b in zip(tossups, bonuses)]
-        errors, _ = validate_layouts(index, spec, layouts)
-        if not errors:
-            break
-    else:
-        raise InfeasibleError(
-            [f"no hard-rule-valid construction found in {max_attempts} attempts"]
-        )
+    tossups, bonuses, attempts = construct_random(spec, index, rng, max_attempts)
 
     accepted = _local_search(index, tossups, bonuses, scorer, weights, rng, iterations)
     layouts = [
@@ -85,6 +70,27 @@ def solve_baseline(
         weights,
         time.perf_counter() - started,
         {"construction_attempts": attempts, "accepted_moves": accepted},
+    )
+
+
+def construct_random(
+    spec: PacketBuildSpec,
+    index: PoolIndex,
+    rng: random.Random,
+    max_attempts: int = 500,
+) -> tuple[list[list[str]], list[list[str]], int]:
+    """Random hard-rule-valid packet contents (unoptimized); returns tossups, bonuses, attempts."""
+    for attempts in range(1, max_attempts + 1):
+        profiles = _sample_profiles(spec, index, rng)
+        if profiles is None:
+            continue
+        tossups, bonuses = _assign(profiles, index, rng)
+        layouts = [PacketLayout(tuple(t), tuple(b)) for t, b in zip(tossups, bonuses)]
+        errors, _ = validate_layouts(index, spec, layouts)
+        if not errors:
+            return tossups, bonuses, attempts
+    raise InfeasibleError(
+        [f"no hard-rule-valid construction found in {max_attempts} attempts"]
     )
 
 

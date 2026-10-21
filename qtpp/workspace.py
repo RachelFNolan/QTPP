@@ -4,7 +4,7 @@ import json
 import re
 import tempfile
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from itertools import combinations
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -14,6 +14,14 @@ from .build_spec import PacketBuildSpec
 from .generation import GeneratedPackets, generate_packets
 from .json_export import packet_filename, packet_to_dict
 from .model import Bonus, Packet, QuestionPlacement, QuestionSet, Tossup
+from .baseline_stats import (
+    DEFAULT_SAMPLES,
+    MAX_SAMPLES,
+    baseline_stats,
+    normalize,
+    sample_random_layouts,
+)
+from .label_store import DEFAULT_LABELS, append_label, label_summary, load_labels, pair_key
 from .scoring import PacketLayout, SoftWeights, score_layouts
 from .similarity import SimilarityWeights, build_similarity, question_text
 from .solving import InfeasibleError, PoolIndex, validate_layouts
@@ -48,6 +56,8 @@ class _Run:
     scorer: Any
     weights: SoftWeights
     similarity_id: str
+    cross_scores: dict[str, dict[str, float]] = field(default_factory=dict)
+    normalized: dict[str, Any] = field(default_factory=dict)
 
 
 class Workspace:
@@ -57,13 +67,16 @@ class Workspace:
         self,
         templates_dir: str | Path = DEFAULT_TEMPLATES,
         demo_csv: str | Path = DEFAULT_DEMO,
+        labels_path: str | Path = DEFAULT_LABELS,
     ) -> None:
+        self._labels_path = Path(labels_path)
         self.templates_dir = Path(templates_dir)
         self.demo_csv = Path(demo_csv)
         self._lock = threading.RLock()
         self._pool: QuestionSet | None = None
         self._template: BuildTemplate | None = None
         self._runs: list[_Run] = []
+        self._baseline: dict[str, dict[str, float]] = {}
         self._selected_run = 0
         self._draft: QuestionSet | None = None
         self._review_errors: tuple[str, ...] = ()
@@ -153,6 +166,7 @@ class Workspace:
             self._pool = pool
             self._template = None
             self._runs = []
+            self._baseline = {}
             self._selected_run = 0
             self._draft = None
             self._review_errors = ()
@@ -267,6 +281,13 @@ class Workspace:
                 solver_ids = _string_list(request.get("solvers"), "solvers")
                 similarity_ids = _string_list(request.get("similarities"), "similarities")
                 seed = _integer(request.get("seed", 0), "seed")
+                baseline_samples = _integer(
+                    request.get("baseline_samples", DEFAULT_SAMPLES), "baseline_samples"
+                )
+                if not 1 <= baseline_samples <= MAX_SAMPLES:
+                    raise ValueError(
+                        f"baseline_samples must be between 1 and {MAX_SAMPLES}."
+                    )
             except (KeyError, TypeError, ValueError) as error:
                 raise WorkspaceError(str(error)) from error
             if not solver_ids or not similarity_ids:
@@ -287,11 +308,13 @@ class Workspace:
             except (TypeError, ValueError) as error:
                 raise WorkspaceError(str(error)) from error
             runs: list[_Run] = []
+            scorers = {
+                similarity_id: build_similarity(pool, SIMILARITY_OPTIONS[similarity_id])
+                for similarity_id in dict.fromkeys(similarity_ids)
+            }
             for solver_id in solver_ids:
                 for similarity_id in similarity_ids:
-                    pair_scorer = build_similarity(
-                        pool, SIMILARITY_OPTIONS[similarity_id]
-                    )
+                    pair_scorer = scorers[similarity_id]
                     try:
                         generated = generate_packets(
                             pool,
@@ -306,6 +329,34 @@ class Workspace:
                     runs.append(
                         _Run(generated, spec, pair_scorer, weights, similarity_id)
                     )
+            category_of = PoolIndex.from_pool(pool).category_of
+            for run in runs:
+                layouts = _layouts_from_question_set(run.generated.question_set)
+                # Re-score every layout with every selected scorer so runs can be
+                # compared on one common yardstick.
+                run.cross_scores = {
+                    similarity_id: _score_dict(
+                        score_layouts(layouts, category_of, scorer, weights)
+                    )
+                    for similarity_id, scorer in scorers.items()
+                }
+            try:
+                stats = baseline_stats(
+                    pool,
+                    sample_random_layouts(pool, spec, baseline_samples, seed),
+                    scorers,
+                    weights,
+                )
+            except (InfeasibleError, ValueError) as error:
+                raise WorkspaceError(f"Random baseline failed: {error}") from error
+            for run in runs:
+                run.normalized = normalize(
+                    {key: value["total"] for key, value in run.cross_scores.items()}, stats
+                )
+            self._baseline = {
+                key: {"mean": stat.mean, "stdev": stat.stdev, "samples": stat.samples}
+                for key, stat in stats.items()
+            }
             self._template = template
             self._runs = runs
             self._selected_run = 0
@@ -392,7 +443,7 @@ class Workspace:
             pool_questions = _questions_by_id(pool)
             layouts = _layouts_from_question_set(draft)
             findings = _composition_findings(pool, layouts, pool_questions, target)
-            conflicts = _conflict_findings(layouts, pool_questions, run)
+            conflicts = _conflict_findings(layouts, pool_questions, run, self._labels_path)
             return {
                 "request": request,
                 "interpretation": target,
@@ -443,6 +494,36 @@ class Workspace:
                 )
             return {"files": files}
 
+    def label_pair(self, request: Mapping[str, Any]) -> dict[str, Any]:
+        """Record a human similarity judgment for two pool questions."""
+        with self._lock:
+            pool = self._require_pool()
+            questions = {q.metadata.id: q for q in (*pool.tossups, *pool.bonuses)}
+            first_id, second_id = request.get("first_id"), request.get("second_id")
+            if first_id not in questions or second_id not in questions or first_id == second_id:
+                raise WorkspaceError("Choose two different questions from the imported pool.")
+            reviewer = request.get("reviewer", "")
+            if not isinstance(reviewer, str) or len(reviewer) > 80:
+                raise WorkspaceError("reviewer must be text of 80 characters or fewer.")
+            first, second = questions[first_id], questions[second_id]
+            kinds = "-".join(
+                sorted("tossup" if isinstance(q, Tossup) else "bonus" for q in (first, second))
+            )
+            try:
+                record = append_label(
+                    self._labels_path,
+                    key=pair_key(question_text(first), question_text(second)),
+                    first_id=first_id,
+                    second_id=second_id,
+                    label=request.get("label"),
+                    reviewer=reviewer,
+                    pool=pool.metadata.name,
+                    question_types=kinds,
+                )
+            except ValueError as error:
+                raise WorkspaceError(str(error)) from error
+            return {"label": record["label"], "summary": label_summary(load_labels(self._labels_path).values())}
+
     def _workspace_payload(self, leftovers: Sequence[str] | None = None) -> dict[str, Any]:
         pool = self._require_pool()
         draft = self._draft
@@ -467,6 +548,9 @@ class Workspace:
                     "solver": item.generated.report.solver,
                     "seed": item.generated.report.seed,
                     "similarity": _similarity_name(item.similarity_id),
+                    "similarity_id": item.similarity_id,
+                    "cross_scores": item.cross_scores,
+                    "normalized": item.normalized,
                     "seconds": item.generated.report.seconds,
                     "score": _score_dict(item.generated.report.score),
                     "leftover_count": len(item.generated.report.leftover_ids),
@@ -475,6 +559,11 @@ class Workspace:
                 for index, item in enumerate(self._runs)
             ],
             "selected_run": self._selected_run,
+            "baseline": self._baseline,
+            "yardsticks": [
+                {"id": similarity_id, "name": _similarity_name(similarity_id)}
+                for similarity_id in dict.fromkeys(item.similarity_id for item in self._runs)
+            ],
             "pool": self.pool_summary(),
             "draft": {
                 "packets": [
@@ -762,6 +851,7 @@ def _conflict_findings(
     layouts: Sequence[PacketLayout],
     questions: Mapping[str, Tossup | Bonus],
     run: _Run,
+    labels_path: Path | None = None,
 ) -> list[dict[str, Any]]:
     categories = {
         question_id: question.metadata.topic.category
@@ -806,11 +896,20 @@ def _conflict_findings(
     )
     unique: list[dict[str, Any]] = []
     seen: set[tuple[int, str, str, str]] = set()
+    stored = load_labels(labels_path) if labels_path else {}
     for item in candidates:
         pair = tuple(sorted((item["first_id"], item["second_id"])))
         key = (item["packet"], pair[0], pair[1], item["reason"])
         if key not in seen:
             seen.add(key)
+            if stored:
+                known = stored.get(
+                    pair_key(
+                        question_text(questions[item["first_id"]]),
+                        question_text(questions[item["second_id"]]),
+                    )
+                )
+                item["saved_label"] = known["label"] if known else None
             unique.append(item)
         if len(unique) == 20:
             break

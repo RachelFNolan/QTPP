@@ -66,7 +66,7 @@ class PoolJsonImportTests(unittest.TestCase):
             parse_question_pool_json(json.dumps({"tossups": [TOSSUP, TOSSUP]}))
 
     def test_workspace_import_json(self) -> None:
-        workspace = Workspace()
+        workspace = Workspace(labels_path=Path(tempfile.mkdtemp()) / "labels.jsonl")
         summary = workspace.import_json(json.dumps({"tossups": [TOSSUP], "bonuses": [BONUS]}), "p.json")
         self.assertEqual((summary["tossup_count"], summary["bonus_count"]), (1, 1))
         with self.assertRaises(WorkspaceError):

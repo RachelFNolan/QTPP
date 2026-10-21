@@ -60,8 +60,33 @@ def tiny_template() -> dict[str, object]:
 
 class WorkspaceTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.workspace = Workspace(templates_dir=tempfile.mkdtemp())
+        self.workspace = Workspace(templates_dir=tempfile.mkdtemp(), labels_path=Path(tempfile.mkdtemp()) / "labels.jsonl")
         self.workspace._set_pool(tiny_pool())
+
+    def test_label_pair_appends_and_audit_reports_saved_label(self) -> None:
+        self.workspace.generate(
+            {
+                "template": tiny_template(),
+                "packet_count": 1,
+                "solvers": ["baseline"],
+                "similarities": ["balanced-tfidf"],
+            }
+        )
+        result = self.workspace.label_pair(
+            {"first_id": "tu-1", "second_id": "b-1", "label": "similar", "reviewer": "rn"}
+        )
+        self.assertEqual(result["summary"]["similar"], 1)
+        self.workspace.label_pair({"first_id": "b-1", "second_id": "tu-1", "label": "different"})
+        summary = self.workspace.label_pair(
+            {"first_id": "tu-1", "second_id": "b-1", "label": "different"}
+        )["summary"]
+        self.assertEqual((summary["total"], summary["different"]), (1, 1))
+        audit = self.workspace.audit("too much 20th century material")
+        self.assertEqual(audit["likely_conflicts"][0]["saved_label"], "different")
+        with self.assertRaises(WorkspaceError):
+            self.workspace.label_pair({"first_id": "tu-1", "second_id": "tu-1", "label": "similar"})
+        with self.assertRaises(WorkspaceError):
+            self.workspace.label_pair({"first_id": "tu-1", "second_id": "b-1", "label": "maybe"})
 
     def test_comparison_review_audit_and_export_round_trip(self) -> None:
         result = self.workspace.generate(
@@ -112,7 +137,7 @@ class WorkspaceTests(unittest.TestCase):
             / "Question Pool.csv"
         )
         content = sample_csv.read_text(encoding="utf-8-sig")
-        workspace = Workspace(templates_dir=tempfile.mkdtemp())
+        workspace = Workspace(templates_dir=tempfile.mkdtemp(), labels_path=Path(tempfile.mkdtemp()) / "labels.jsonl")
         pool = workspace.import_csv(content, sample_csv.name)
         self.assertEqual(pool["tossup_count"], 330)
         self.assertEqual(pool["bonus_count"], 331)

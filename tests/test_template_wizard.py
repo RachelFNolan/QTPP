@@ -1,4 +1,5 @@
 import tempfile
+from pathlib import Path
 import unittest
 
 from qtpp.feasibility import check_pool_feasibility
@@ -40,7 +41,7 @@ class TemplateWizardTests(unittest.TestCase):
 
 class WorkspaceFeasibilityTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.workspace = Workspace(templates_dir=tempfile.mkdtemp())
+        self.workspace = Workspace(templates_dir=tempfile.mkdtemp(), labels_path=Path(tempfile.mkdtemp()) / "labels.jsonl")
         self.workspace.import_demo()
 
     def test_suggest_then_feasibility(self) -> None:

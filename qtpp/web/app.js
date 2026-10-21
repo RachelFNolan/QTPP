@@ -8,10 +8,14 @@ const state = {
   layouts: null,
   template: null,
   dirty: false,
+  reviewPacket: 0,
   demo: false,
   demoStage: 0,
   selectedFile: null,
   patterns: [],
+  templateDirty: false,
+  feasibility: null,
+  initialized: false,
 };
 
 const titles = {
@@ -54,11 +58,13 @@ function escapeHtml(value) {
 
 function setNotice(message, kind = "") {
   const notice = byId("notice");
-  notice.textContent = message;
+  window.clearTimeout(setNotice.timer);
+  byId("notice-text").textContent = message;
   notice.className = `notice ${kind}`;
+  notice.setAttribute("role", kind === "error" ? "alert" : "status");
   notice.hidden = !message;
-  if (message) {
-    window.clearTimeout(setNotice.timer);
+  // Errors stay until dismissed; other messages fade after a few seconds.
+  if (message && kind !== "error") {
     setNotice.timer = window.setTimeout(() => { notice.hidden = true; }, 7000);
   }
 }
@@ -75,19 +81,26 @@ function setBusy(button, busy, label) {
   }
 }
 
-function showView(view) {
+function showView(view, { focus = true } = {}) {
+  state.view = view;
   document.querySelectorAll(".view").forEach((section) => {
     section.classList.toggle("active", section.id === `view-${view}`);
   });
   document.querySelectorAll(".nav-item").forEach((button) => {
-    button.classList.toggle("active", button.dataset.view === view);
+    const active = button.dataset.view === view;
+    button.classList.toggle("active", active);
+    if (active) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current");
   });
   byId("page-title").textContent = titles[view] || "QTPP Packet Workshop";
   if (view === "review") renderReview();
+  updateChrome();
+  if (focus && state.initialized) byId("page-title").focus({ preventScroll: true });
+  window.scrollTo({ top: 0 });
 }
 
-function poolLoaded(pool) {
+function poolLoaded(pool, source = "") {
   state.pool = pool;
+  state.poolSource = source;
   byId("pool-pill").textContent = `${pool.tossup_count} tossups · ${pool.bonus_count} bonuses`;
   byId("pool-pill").className = "pill good";
   const summary = byId("pool-summary");
@@ -117,6 +130,7 @@ function poolLoaded(pool) {
   prefillCategoryRows();
   renderPatterns();
   scheduleFeasibility();
+  updateChrome();
   byId("config-pool-hint").innerHTML =
     `<strong>${categories.length} categories available</strong><br>${categories.slice(0, 8).map(escapeHtml).join(" · ")}${categories.length > 8 ? " · …" : ""}`;
 }
@@ -163,7 +177,6 @@ function currentTemplateFromForm() {
       ? null
       : Number(byId(type === "tossup" ? "leftover-tu" : "leftover-bonus").value),
   }));
-  state.dirty = false;
   return {
     schema_version: 1,
     name: byId("template-name").value.trim() || "Custom template",
@@ -177,6 +190,7 @@ function currentTemplateFromForm() {
 
 function loadTemplateForm(template) {
   state.template = structuredClone(template);
+  state.templateDirty = false;
   byId("template-name").value = template.name || "";
   byId("tossup-capacity").value = template.tossup_capacity ?? 20;
   byId("bonus-capacity").value = template.bonus_capacity ?? 20;
@@ -192,6 +206,7 @@ function loadTemplateForm(template) {
   const bonus = leftovers.find((item) => item.question_type === "bonus");
   byId("leftover-tu").value = tu?.maximum ?? "";
   byId("leftover-bonus").value = bonus?.maximum ?? "";
+  updateChrome();
 }
 
 let feasibilityTimer;
@@ -205,6 +220,8 @@ async function updateFeasibility() {
   if (!state.pool) {
     box.className = "hint-box feasibility";
     box.textContent = "Import a pool to check feasibility.";
+    state.feasibility = null;
+    updateChrome();
     return;
   }
   const sequence = ++feasibilitySequence;
@@ -212,6 +229,8 @@ async function updateFeasibility() {
   try { template = currentTemplateFromForm(); } catch (error) {
     box.className = "hint-box feasibility bad";
     box.textContent = error.message;
+    state.feasibility = { feasible: false, max: 0 };
+    updateChrome();
     return;
   }
   const packetCount = Number(byId("packet-count").value);
@@ -225,6 +244,8 @@ async function updateFeasibility() {
     if (sequence !== feasibilitySequence) return;
     const short = result.requirements.filter((row) => !row.ok);
     const messages = result.errors.length ? result.errors : short.map((row) => `${row.label}: need ${row.needed}, pool has ${row.available}`);
+    state.feasibility = { feasible: result.feasible, max: result.max_packets };
+    updateChrome();
     box.className = `hint-box feasibility ${result.feasible ? "good" : "bad"}`;
     box.innerHTML = `<strong>${result.feasible ? "Pool can support this template" : "Pool cannot support this template"}</strong><br>` +
       `Up to ${result.max_packets} packet${result.max_packets === 1 ? "" : "s"} fit these minimums.` +
@@ -484,6 +505,7 @@ function renderOptions() {
 
 function updateRunState(payload) {
   state.payload = payload;
+  state.dirty = false;
   state.layouts = payload.draft.packets.map((packet) => ({
     tossups: [...packet.tossups],
     bonuses: [...packet.bonuses],
@@ -492,21 +514,85 @@ function updateRunState(payload) {
   renderReview();
 }
 
+function comparisonScore(run, yardstick) {
+  if (yardstick === "own") {
+    return run.index === state.payload.selected_run ? state.payload.draft.report.score : run.score;
+  }
+  // The referee has no penalty of its own, so show each run on its own scorer.
+  if (yardstick === "referee") return comparisonScore(run, "own");
+  return run.cross_scores?.[yardstick] || run.score;
+}
+
+function percentBetter(value) {
+  const points = Number(value) * 100;
+  return `${points >= 0 ? "" : "−"}${Math.abs(points).toFixed(1)}%`;
+}
+
+// Higher is better for the ranking value; "own" falls back to negated raw penalty.
+function rankingValue(run, yardstick) {
+  if (yardstick === "referee") return run.normalized.referee;
+  if (yardstick === "own") return -Number(comparisonScore(run, "own").total);
+  return run.normalized.improvement[yardstick];
+}
+
 function renderComparison() {
   const host = byId("comparison-results");
+  const explainer = byId("comparison-explainer");
   if (!state.payload) {
     host.innerHTML = "";
+    explainer.hidden = true;
     return;
   }
-  host.innerHTML = state.payload.runs.map((run) => {
+  const { runs, yardsticks, baseline } = state.payload;
+  const multiScorer = yardsticks.length > 1;
+  const valid = (value) => ["referee", "own"].includes(value) || yardsticks.some((item) => item.id === value);
+  if (!state.yardstick || !valid(state.yardstick)) state.yardstick = "referee";
+  const yardstick = state.yardstick;
+  const comparable = !(yardstick === "own" && multiScorer);
+  const scored = runs.map((run) => ({ run, score: comparisonScore(run, yardstick), value: rankingValue(run, yardstick) }));
+  const bestValue = Math.max(...scored.map((item) => item.value));
+  const ranked = [...scored].sort((a, b) => b.value - a.value);
+  const yardstickName = yardstick === "referee" ? "the referee (all selected scorers)"
+    : yardstick === "own" ? "" : yardsticks.find((item) => item.id === yardstick)?.name;
+  const samples = Object.values(baseline)[0]?.samples ?? 0;
+
+  explainer.hidden = false;
+  explainer.innerHTML = `
+    <h3>How to read these results</h3>
+    <ul class="small">
+      <li><strong>Penalty (lower is better)</strong> adds three parts: adjacent same-category tossups, similarity within a packet, and similarity between nearby questions (weighted as set above). Its units depend on the similarity scorer.</li>
+      <li><strong>% better than random (higher is better)</strong> compares the penalty with ${samples} random layouts that obey the same hard rules, scored by the same scorer. 0% is no better than random, 100% is a zero penalty. Because it is relative to each scorer's own baseline, it is comparable across scorers.</li>
+      <li><strong>Referee:</strong> the average % better than random across all selected scorers. No solver optimizes it directly, so it avoids favoring the scorer a build was tuned for. ${multiScorer ? "Choose a single scorer below to rank by it instead." : "With one scorer selected it equals that scorer's % better than random."}</li>
+      <li>Hard rules are enforced regardless of score. Equal results are all marked best. Random baselines use the seed and ${samples} samples; more samples give a steadier baseline.</li>
+    </ul>
+    <div class="field-row yardstick-row"><label for="yardstick">Rank builds by</label>
+      <select id="yardstick">
+        <option value="referee" ${yardstick === "referee" ? "selected" : ""}>Referee: average % better than random</option>
+        ${multiScorer ? yardsticks.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === yardstick ? "selected" : ""}>${escapeHtml(item.name)} only</option>`).join("") : ""}
+        <option value="own" ${yardstick === "own" ? "selected" : ""}>Each build's own penalty (not comparable across scorers)</option>
+      </select></div>`;
+
+  const header = !comparable
+    ? '<div class="review-banner warn">Each penalty below uses a different scorer, so “best” is only meaningful among builds that share a scorer. Switch to the referee for a fair comparison.</div>'
+    : yardstick === "own"
+      ? `<div class="best-summary"><strong>Best: ${escapeHtml(solverLabel(ranked[0].run))} · ${escapeHtml(ranked[0].run.similarity)}</strong> with penalty ${Number(ranked[0].score.total).toFixed(2)}.</div>`
+      : `<div class="best-summary"><strong>Best: ${escapeHtml(solverLabel(ranked[0].run))} · ${escapeHtml(ranked[0].run.similarity)}</strong>, ${percentBetter(bestValue)} better than random on ${escapeHtml(yardstickName)}.</div>`;
+
+  host.innerHTML = header + scored.map(({ run, score, value }) => {
     const selected = run.index === state.payload.selected_run;
-    const score = run.index === state.payload.selected_run
-      ? state.payload.draft.report.score
-      : run.score;
-    return `<article class="result-card ${selected ? "selected" : ""}">
-      <div class="result-head"><strong>${escapeHtml(run.solver)} · ${escapeHtml(run.similarity)}</strong>
-        ${selected ? '<span class="pill good">Reviewing</span>' : ""}</div>
-      <div class="score">${Number(score.total).toFixed(2)} <small>penalty · lower is better</small></div>
+    const isBest = comparable && Math.abs(value - bestValue) < 1e-9 && runs.length > 1;
+    const rank = ranked.findIndex((item) => item.run === run) + 1;
+    const gap = (bestValue - value) * 100;
+    const penaltyLabel = yardstick === "referee" || yardstick === "own" ? `${run.similarity} penalty` : "penalty";
+    const heading = yardstick === "referee" ? "Referee" : yardstick === "own" ? "Own scorer" : "On this scorer";
+    return `<article class="result-card ${selected ? "selected" : ""} ${isBest ? "best" : ""}">
+      <div class="result-head"><strong>${escapeHtml(solverLabel(run))} · ${escapeHtml(run.similarity)}</strong>
+        <span class="badges">${isBest ? '<span class="pill best-pill">★ Best score</span>' : ""}${selected ? '<span class="pill good">Reviewing</span>' : ""}</span></div>
+      <div class="score-pair">
+        ${yardstick === "own" ? "" : `<div class="score-block"><div class="score">${percentBetter(value)}</div><small>better than random · ${heading}</small>
+          ${runs.length > 1 ? `<div class="rank">${isBest ? "Best of " + runs.length : `${gap.toFixed(1)} points behind best · rank ${rank} of ${runs.length}`}</div>` : ""}</div>`}
+        <div class="score-block"><div class="score">${Number(score.total).toFixed(2)}</div><small>${escapeHtml(penaltyLabel)} · lower is better</small></div>
+      </div>
       <div class="score-detail">
         <span>Adjacency<br>${Number(score.adjacent_category).toFixed(2)}</span>
         <span>Same packet<br>${Number(score.same_packet).toFixed(2)}</span>
@@ -516,6 +602,10 @@ function renderComparison() {
       <button class="button secondary small" data-select-run="${run.index}" ${selected ? "disabled" : ""}>${selected ? "Selected for review" : "Review this result"}</button>
     </article>`;
   }).join("");
+}
+
+function solverLabel(run) {
+  return optionLabel("solvers", run.solver === "python-baseline" ? "baseline" : run.solver === "cpsat" || run.solver === "cp-sat" ? "cpsat" : run.solver);
 }
 
 function reviewMessage() {
@@ -531,6 +621,7 @@ function reviewMessage() {
 }
 
 function renderReview() {
+  updateChrome();
   const summary = byId("review-summary");
   const host = byId("packet-list");
   if (!state.payload || !state.layouts) {
@@ -543,34 +634,54 @@ function renderReview() {
     summary.insertAdjacentHTML("afterbegin", `<div class="review-banner warn"><strong>Unsaved placement edits.</strong> Recalculate and validate before audit or export.</div>`);
   }
   const questions = Object.fromEntries(state.payload.draft.questions.map((question) => [question.id, question]));
-  host.innerHTML = state.payload.draft.packets.map((packet, packetIndex) => `
+  const packets = state.payload.draft.packets;
+  if (state.reviewPacket >= packets.length) state.reviewPacket = 0;
+  const packetIndex = state.reviewPacket;
+  const packet = packets[packetIndex];
+  host.innerHTML = `
+    <label class="packet-picker">Packet
+      <select id="review-packet" data-review-packet aria-label="Packet to review">
+        ${packets.map((item, index) => `<option value="${index}"${index === packetIndex ? " selected" : ""}>${escapeHtml(item.name)}</option>`).join("")}
+      </select>
+    </label>
     <article class="packet-card">
       <header class="packet-header">
         <strong>${escapeHtml(packet.name)}</strong>
         <span>${state.layouts[packetIndex].tossups.length} tossups · ${state.layouts[packetIndex].bonuses.length} bonuses</span>
       </header>
       <div class="packet-body">
-        ${renderQuestionColumn(state.layouts[packetIndex].tossups, "tossups", packetIndex, questions)}
-        ${renderQuestionColumn(state.layouts[packetIndex].bonuses, "bonuses", packetIndex, questions)}
+        ${renderPacketRows(state.layouts[packetIndex], packetIndex, questions)}
       </div>
-    </article>`).join("");
+    </article>`;
 }
 
-function renderQuestionColumn(ids, type, packetIndex, questions) {
-  return `<div class="question-column"><h4>${type} · ${ids.length}</h4>${ids.map((id, index) => {
-    const question = questions[id];
-    if (!question) return "";
-    const prompt = question.type === "tossup" ? question.question : question.leadin;
-    const answer = question.type === "tossup"
-      ? question.answer
-      : question.parts.map((part) => `${part.question} — ${part.answer}`).join(" · ");
-    return `<div class="question-row">
+// Escape everything, then restore only the <b>, <i> and <u> tags used in question text.
+function formatText(value) {
+  return escapeHtml(value).replace(/&lt;(\/?)(b|i|u)&gt;/gi, "<$1$2>");
+}
+
+// Tossup N and bonus N share a grid row so numbered pairs line up.
+function renderPacketRows(layout, packetIndex, questions) {
+  const rows = Math.max(layout.tossups.length, layout.bonuses.length);
+  let html = `<h4 class="column-head">tossups · ${layout.tossups.length}</h4><h4 class="column-head">bonuses · ${layout.bonuses.length}</h4>`;
+  for (let index = 0; index < rows; index += 1) {
+    html += renderQuestionCell(layout.tossups[index], index, "tossups", packetIndex, questions);
+    html += renderQuestionCell(layout.bonuses[index], index, "bonuses", packetIndex, questions);
+  }
+  return html;
+}
+
+function renderQuestionCell(id, index, type, packetIndex, questions) {
+  const question = id === undefined ? null : questions[id];
+  if (!question) return '<div class="question-cell empty"></div>';
+  const body = question.type === "tossup"
+      ? `<p class="question-text">${formatText(question.question)}</p><p class="answer-text"><b>ANSWER:</b> ${formatText(question.answer)}</p>`
+      : `<p class="question-text">${formatText(question.leadin)}</p>${question.parts.map((part, partIndex) => `<p class="question-text"><b>[${partIndex + 1}]</b> ${formatText(part.question)}</p><p class="answer-text"><b>ANSWER:</b> ${formatText(part.answer)}</p>`).join("")}`;
+  return `<div class="question-cell"><div class="question-row">
       <span class="question-number">${String(index + 1).padStart(2, "0")}</span>
       <div class="question-main">
-        <strong>${escapeHtml(question.id)}</strong>
-        <p>${escapeHtml(prompt)}</p>
         <span class="topic-tag">${escapeHtml(question.category)} / ${escapeHtml(question.subcategory)}</span>
-        <details><summary class="topic-tag">Answer/details</summary><p>${escapeHtml(answer)}</p></details>
+        ${body}
       </div>
       <div class="question-actions">
         <button class="icon-button" title="Move up" aria-label="Move up" data-order="up" data-packet="${packetIndex}" data-type="${type}" data-id="${escapeHtml(id)}">↑</button>
@@ -580,8 +691,7 @@ function renderQuestionColumn(ids, type, packetIndex, questions) {
           ${state.payload.draft.packets.map((packet, destination) => destination === packetIndex ? "" : `<option value="${destination}">${escapeHtml(packet.name)}</option>`).join("")}
         </select>
       </div>
-    </div>`;
-  }).join("")}</div>`;
+    </div></div>`;
 }
 
 function renderAudit(result) {
@@ -611,11 +721,16 @@ function renderAudit(result) {
     ? `<div class="conflict-list">${result.likely_conflicts.map((item) => `
       <div class="conflict-row"><strong>Packet ${item.packet}</strong>
         <span>${escapeHtml(item.first_id)} ↔ ${escapeHtml(item.second_id)} · ${escapeHtml(item.reason)}</span>
-        <em>${Number(item.similarity).toFixed(3)}</em></div>`).join("")}</div>`
+        <em>${Number(item.similarity).toFixed(3)}</em>
+        <div class="label-actions" role="group" aria-label="Your judgment of this pair" data-first="${escapeHtml(item.first_id)}" data-second="${escapeHtml(item.second_id)}">
+          ${[["similar", "Too similar"], ["different", "Fine together"], ["borderline", "Unsure"]].map(([value, text]) =>
+            `<button type="button" class="button small secondary" data-label="${value}" aria-pressed="${item.saved_label === value}">${text}</button>`).join("")}
+          <span class="label-status small muted-text" aria-live="polite">${item.saved_label ? "Saved" : ""}</span>
+        </div></div>`).join("")}</div>`
     : `<p>No candidate conflicts were found in the current layout.</p>`;
   host.innerHTML = `${hardErrors}${distribution}
     <article class="card audit-card"><h3>Likely conflicts to review</h3>
-      <p>Top pairwise similarity candidates and adjacent same-category tossups. These are review signals, not automatic errors.</p>
+      <p>Top pairwise similarity candidates and adjacent same-category tossups. These are review signals, not automatic errors. Your judgments are saved to <code>calibration/labels.jsonl</code> (IDs and hashes only, no question text) to calibrate similarity scorers over time.</p>
       ${conflicts}
     </article>`;
 }
@@ -678,9 +793,33 @@ document.querySelectorAll("[data-go]").forEach((button) => {
   button.addEventListener("click", () => showView(button.dataset.go));
 });
 
-byId("csv-file").addEventListener("change", (event) => {
-  state.selectedFile = event.target.files[0] || null;
+function selectImportFile(file) {
+  state.selectedFile = file || null;
   byId("import-csv").disabled = !state.selectedFile;
+  byId("selected-file").textContent = file
+    ? `Selected: ${file.name} (${(file.size / 1024).toFixed(file.size < 10240 ? 1 : 0)} KB). Press “Import selected file”.`
+    : "or drag and drop a CSV or JSON file here";
+}
+byId("csv-file").addEventListener("change", (event) => selectImportFile(event.target.files[0]));
+const dropZone = document.querySelector(".hero-card");
+["dragenter", "dragover"].forEach((name) => dropZone.addEventListener(name, (event) => {
+  event.preventDefault();
+  dropZone.classList.add("dragging");
+}));
+["dragleave", "drop"].forEach((name) => dropZone.addEventListener(name, (event) => {
+  event.preventDefault();
+  if (name === "dragleave" && dropZone.contains(event.relatedTarget)) return;
+  dropZone.classList.remove("dragging");
+}));
+dropZone.addEventListener("drop", (event) => {
+  const file = event.dataTransfer?.files?.[0];
+  if (!file) return;
+  if (!/\.(csv|json)$/i.test(file.name)) {
+    setNotice(`“${file.name}” is not a CSV or JSON file.`, "error");
+    return;
+  }
+  selectImportFile(file);
+  showView("import", { focus: false });
 });
 byId("import-csv").addEventListener("click", async (event) => {
   const button = event.currentTarget;
@@ -692,7 +831,7 @@ byId("import-csv").addEventListener("click", async (event) => {
     const pool = isJson
       ? await api("/api/import-json", { json: content, filename: state.selectedFile.name })
       : await api("/api/import", { csv: content, filename: state.selectedFile.name });
-    poolLoaded(pool);
+    poolLoaded(pool, state.selectedFile.name);
     setNotice(`Imported ${pool.tossup_count} tossups and ${pool.bonus_count} bonuses.`, "success");
   } catch (error) { setNotice(error.message, "error"); }
   finally { setBusy(button, false); }
@@ -703,7 +842,7 @@ byId("load-demo").addEventListener("click", async () => {
   setBusy(button, true, "Loading sample…");
   try {
     const pool = await api("/api/demo", {});
-    poolLoaded(pool);
+    poolLoaded(pool, "Sample: 2025 ACF Winter");
     state.demo = true;
     state.demoStage = 0;
     showView("configure");
@@ -727,6 +866,11 @@ function showWizard(mode) {
 
 byId("template-select").addEventListener("change", (event) => {
   const value = event.target.value;
+  if (state.templateDirty && value !== "" && !window.confirm("Discard your unsaved template edits and switch starting point?")) {
+    event.target.value = state.startValue ?? "";
+    return;
+  }
+  state.startValue = value;
   showWizard(value === START_MIRROR ? "mirror" : value === START_CATEGORIES ? "categories" : "");
   if (value === START_SCRATCH) {
     byId("template-name").value = "My packet template";
@@ -751,9 +895,17 @@ byId("feasibility").addEventListener("click", (event) => {
     scheduleFeasibility();
   }
 });
-byId("view-configure").addEventListener("input", scheduleFeasibility);
+byId("view-configure").addEventListener("input", (event) => {
+  if (event.target.closest(".configure-grid > article") && event.target.id !== "template-select") state.templateDirty = true;
+  scheduleFeasibility();
+  updateChrome();
+});
 byId("view-configure").addEventListener("click", (event) => {
   if (event.target.closest("#add-tossup-quota, #add-bonus-quota, .remove-row")) scheduleFeasibility();
+  if (event.target.closest(".configure-grid > article button") && !event.target.closest("#reset-template, #save-template, #template-select, #wizard-run")) {
+    state.templateDirty = true;
+  }
+  window.setTimeout(updateChrome, 0);
 });
 byId("template-select").addEventListener("change", scheduleFeasibility);
 byId("template-file").addEventListener("change", () => window.setTimeout(scheduleFeasibility, 0));
@@ -879,6 +1031,7 @@ byId("save-template").addEventListener("click", () => {
     }
     const blob = new Blob([`${JSON.stringify(template, null, 2)}\n`], { type: "application/json" });
     download(blob, `${slug(template.name)}.json`);
+    state.templateDirty = false;
     setNotice("Template JSON downloaded.", "success");
   } catch (error) { setNotice(error.message, "error"); }
 });
@@ -914,16 +1067,21 @@ byId("copy-tossup-quotas").addEventListener("click", () => {
 byId("run-build").addEventListener("click", async (event) => {
   const button = event.currentTarget;
   setBusy(button, true, "Generating…");
+  let progressTimer;
+  state.building = true;
   try {
     const template = currentTemplateFromForm();
     const solvers = [...document.querySelectorAll('input[name="solver"]:checked')].map((input) => input.value);
     const similarities = [...document.querySelectorAll('input[name="similarity"]:checked')].map((input) => input.value);
+    progressTimer = startProgress("Building packets", solvers.flatMap((solver) =>
+      similarities.map((similarity) => `${optionLabel("solvers", solver)} · ${optionLabel("similarities", similarity)}`)));
     const result = await api("/api/generate", {
       template,
       packet_count: Number(byId("packet-count").value),
       seed: Number(byId("seed").value),
       solvers,
       similarities,
+      baseline_samples: Number(byId("baseline-samples").value),
       soft_weights: {
         adjacent_category: Number(byId("weight-adjacent").value),
         same_packet: Number(byId("weight-packet").value),
@@ -931,13 +1089,20 @@ byId("run-build").addEventListener("click", async (event) => {
         window: Number(byId("weight-window").value),
       },
     });
+    state.templateDirty = false;
+    state.yardstick = null;
     updateRunState(result);
     showView("compare");
     setNotice(`Generated ${result.runs.length} comparable build${result.runs.length === 1 ? "" : "s"}.`, "success");
   } catch (error) { setNotice(error.message, "error"); }
-  finally { setBusy(button, false); }
+  finally { state.building = false; stopProgress(progressTimer); setBusy(button, false); updateChrome(); }
 });
 
+byId("comparison-explainer").addEventListener("change", (event) => {
+  if (event.target.id !== "yardstick") return;
+  state.yardstick = event.target.value;
+  renderComparison();
+});
 byId("comparison-results").addEventListener("click", async (event) => {
   const button = event.target.closest("[data-select-run]");
   if (!button) return;
@@ -962,6 +1127,12 @@ byId("packet-list").addEventListener("click", (event) => {
   renderReview();
 });
 byId("packet-list").addEventListener("change", (event) => {
+  const picker = event.target.closest("[data-review-packet]");
+  if (picker) {
+    state.reviewPacket = Number(picker.value);
+    renderReview();
+    return;
+  }
   const select = event.target.closest("[data-move]");
   if (!select || !state.layouts) return;
   const source = Number(select.dataset.from);
@@ -980,6 +1151,7 @@ byId("apply-review").addEventListener("click", async (event) => {
   const button = event.currentTarget;
   if (!state.layouts) return;
   setBusy(button, true, "Validating…");
+  const timer = startProgress("Recalculating placements", ["Checking hard rules and soft scores"]);
   try {
     const payload = await api("/api/review", { packets: state.layouts });
     updateRunState(payload);
@@ -987,12 +1159,13 @@ byId("apply-review").addEventListener("click", async (event) => {
     renderReview();
     setNotice("Placements renumbered and recalculated against hard rules and soft scores.", "success");
   } catch (error) { setNotice(error.message, "error"); }
-  finally { setBusy(button, false); }
+  finally { stopProgress(timer); setBusy(button, false); updateChrome(); }
 });
 
 byId("run-audit").addEventListener("click", async (event) => {
   const button = event.currentTarget;
   setBusy(button, true, "Investigating…");
+  const timer = startProgress("Investigating draft", ["Interpreting request and comparing packets"]);
   try {
     if (state.dirty) {
       const payload = await api("/api/review", { packets: state.layouts });
@@ -1003,11 +1176,23 @@ byId("run-audit").addEventListener("click", async (event) => {
     renderAudit(result);
     if (result.needs_clarification) setNotice(result.clarification, "error");
   } catch (error) { setNotice(error.message, "error"); }
-  finally { setBusy(button, false); }
+  finally { stopProgress(timer); setBusy(button, false); updateChrome(); }
+});
+byId("audit-results").addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-label]");
+  if (!button) return;
+  const group = button.closest(".label-actions");
+  const status = group.querySelector(".label-status");
+  try {
+    await api("/api/label", { first_id: group.dataset.first, second_id: group.dataset.second, label: button.dataset.label });
+    group.querySelectorAll("[data-label]").forEach((other) => other.setAttribute("aria-pressed", String(other === button)));
+    status.textContent = "Saved";
+  } catch (error) { setNotice(error.message, "error"); }
 });
 byId("export-packets").addEventListener("click", async (event) => {
   const button = event.currentTarget;
   setBusy(button, true, "Preparing files…");
+  const timer = startProgress("Preparing export", ["Validating and rendering packet files"]);
   try {
     if (state.dirty) {
       const payload = await api("/api/review", { packets: state.layouts });
@@ -1022,7 +1207,235 @@ byId("export-packets").addEventListener("click", async (event) => {
     });
     setNotice(`Prepared ${result.files.length} packet JSON file${result.files.length === 1 ? "" : "s"} for download.`, "success");
   } catch (error) { setNotice(error.message, "error"); }
-  finally { setBusy(button, false); }
+  finally { stopProgress(timer); setBusy(button, false); updateChrome(); }
+});
+
+
+function optionLabel(group, id) {
+  return state.options?.[group]?.find((item) => item.id === id)?.label || id;
+}
+
+let progressClock;
+function startProgress(title, items) {
+  const panel = byId("progress");
+  const started = Date.now();
+  const render = () => {
+    const seconds = Math.floor((Date.now() - started) / 1000);
+    panel.innerHTML = `<div class="progress-head"><strong>${escapeHtml(title)}…</strong><span>${seconds}s elapsed</span></div>
+      <div class="progress-bar" aria-hidden="true"><span></span></div>
+      <ul>${items.map((item) => `<li>${escapeHtml(item)} <em>running</em></li>`).join("")}</ul>
+      <p class="small muted-text">Larger pools and exact solvers can take a while. Results appear here when every run finishes.</p>`;
+  };
+  render();
+  panel.hidden = false;
+  window.clearInterval(progressClock);
+  progressClock = window.setInterval(render, 1000);
+  return progressClock;
+}
+function stopProgress() {
+  window.clearInterval(progressClock);
+  byId("progress").hidden = true;
+}
+
+function wholeNumber(value, minimum) {
+  return value !== "" && Number.isInteger(Number(value)) && Number(value) >= minimum;
+}
+
+function validateTemplateForm() {
+  document.querySelectorAll('[aria-invalid="true"]').forEach((element) => {
+    element.removeAttribute("aria-invalid");
+    element.removeAttribute("aria-describedby");
+  });
+  const issues = [];
+  const flag = (element, message) => {
+    element.setAttribute("aria-invalid", "true");
+    element.setAttribute("aria-describedby", "form-issues");
+    issues.push(message);
+  };
+  const checks = [
+    ["packet-count", "Number of packets", 1], ["tossup-capacity", "Tossups per packet", 0],
+    ["bonus-capacity", "Bonuses per packet", 0], ["weight-window", "Nearby window", 1], ["baseline-samples", "Random baseline samples", 1],
+  ];
+  for (const [id, label, minimum] of checks) {
+    if (!wholeNumber(byId(id).value, minimum)) flag(byId(id), `${label} must be a whole number of ${minimum} or more.`);
+  }
+  for (const id of ["weight-adjacent", "weight-packet", "weight-nearby"]) {
+    const value = byId(id).value;
+    if (value === "" || !(Number(value) >= 0)) flag(byId(id), "Soft scoring weights must be 0 or more.");
+  }
+  for (const id of ["leftover-tu", "leftover-bonus"]) {
+    if (byId(id).value !== "" && !wholeNumber(byId(id).value, 0)) flag(byId(id), "Allowed leftovers must be blank or a whole number of 0 or more.");
+  }
+  for (const type of ["tossup", "bonus"]) {
+    const name = type === "tossup" ? "Tossup" : "Bonus";
+    const seen = new Set();
+    let minimumTotal = 0;
+    document.querySelectorAll(`#${type}-quota-list .quota-row`).forEach((row, index) => {
+      const category = row.querySelector(".quota-category");
+      const subcategory = row.querySelector(".quota-subcategory");
+      const min = row.querySelector(".quota-min");
+      const max = row.querySelector(".quota-max");
+      const label = `${name} quota ${index + 1}`;
+      if (!category.value.trim()) flag(category, `${label} needs a category.`);
+      if (!wholeNumber(min.value, 0)) flag(min, `${label}: minimum must be a whole number of 0 or more.`);
+      if (max.value !== "" && !wholeNumber(max.value, 0)) flag(max, `${label}: maximum must be blank or a whole number of 0 or more.`);
+      else if (max.value !== "" && wholeNumber(min.value, 0) && Number(max.value) < Number(min.value)) flag(max, `${label}: maximum is below the minimum.`);
+      const key = `${category.value.trim().toLowerCase()}|${subcategory.value.trim().toLowerCase()}`;
+      if (category.value.trim() && seen.has(key)) flag(category, `${label} repeats an earlier quota for the same category/subcategory.`);
+      seen.add(key);
+      if (!subcategory.value.trim() && wholeNumber(min.value, 0)) minimumTotal += Number(min.value);
+    });
+    const capacity = Number(byId(`${type}-capacity`).value);
+    if (Number.isFinite(capacity) && minimumTotal > capacity) {
+      flag(byId(`${type}-capacity`), `${name} category minimums add up to ${minimumTotal}, more than ${capacity} per packet.`);
+    }
+  }
+  state.patterns.forEach((rule, index) => {
+    if (isSimpleRule(rule)) {
+      const problem = simpleRuleProblem(rule);
+      if (problem) issues.push(`Distribution pattern ${index + 1}: ${problem}`);
+    }
+  });
+  const box = byId("form-issues");
+  box.hidden = !issues.length;
+  box.innerHTML = issues.length
+    ? `<strong>${plural(issues.length, "thing")} to fix</strong><ul>${issues.slice(0, 8).map((issue) => `<li>${escapeHtml(issue)}</li>`).join("")}</ul>${issues.length > 8 ? `<p class="small">…and ${issues.length - 8} more.</p>` : ""}`
+    : "";
+  return issues;
+}
+
+function currentSelections() {
+  const pick = (name) => [...document.querySelectorAll(`input[name="${name}"]:checked`)].map((input) => input.value);
+  return { solvers: pick("solver"), similarities: pick("similarity") };
+}
+
+function summaryRow(label, value) {
+  return `<div><dt>${escapeHtml(label)}</dt><dd>${value}</dd></div>`;
+}
+
+function renderSummary(issues) {
+  const pool = state.pool;
+  const dash = '<span class="dim">—</span>';
+  const subcategories = pool ? Object.values(pool.categories).reduce((sum, subs) => sum + subs.length, 0) : 0;
+  const poolRows = pool
+    ? [
+      summaryRow("Set", escapeHtml(pool.metadata.name || "Question pool")),
+      summaryRow("Year", escapeHtml(pool.metadata.year ?? "unknown")),
+      state.poolSource ? summaryRow("Source", escapeHtml(state.poolSource)) : "",
+      summaryRow("Tossups", pool.tossup_count.toLocaleString()),
+      summaryRow("Bonuses", pool.bonus_count.toLocaleString()),
+      summaryRow("Categories", Object.keys(pool.categories).length),
+      summaryRow("Subcategories", subcategories),
+    ].join("")
+    : summaryRow("Pool", dash);
+  const quotaCount = document.querySelectorAll(".quota-row").length;
+  const feasibility = !pool ? dash
+    : !state.feasibility ? "checking…"
+    : state.feasibility.feasible ? '<span class="ok">fits pool</span>' : `<span class="bad">short (max ${state.feasibility.max})</span>`;
+  const templateRows = [
+    summaryRow("Name", escapeHtml(byId("template-name").value || "—")),
+    summaryRow("Packets", escapeHtml(byId("packet-count").value || "—")),
+    summaryRow("Per packet", `${escapeHtml(byId("tossup-capacity").value || 0)} TU · ${escapeHtml(byId("bonus-capacity").value || 0)} B`),
+    summaryRow("Quotas / rules", `${quotaCount} / ${state.patterns.length}`),
+    summaryRow("Feasibility", feasibility),
+    issues.length ? summaryRow("Form", `<span class="bad">${plural(issues.length, "issue")}</span>`) : "",
+    state.templateDirty ? summaryRow("Status", '<span class="warn">edited, not saved</span>') : "",
+  ].join("");
+  const { solvers, similarities } = currentSelections();
+  let buildRows = summaryRow("Solvers", escapeHtml(solvers.map((id) => optionLabel("solvers", id)).join(", ") || "none selected"))
+    + summaryRow("Scorers", escapeHtml(similarities.map((id) => optionLabel("similarities", id)).join(", ") || "none selected"));
+  if (state.payload) {
+    const run = state.payload.runs.find((item) => item.index === state.payload.selected_run);
+    const report = state.payload.draft.report;
+    buildRows += summaryRow("Reviewing", run ? escapeHtml(`${optionLabel("solvers", run.solver)} · seed ${run.seed}`) : dash)
+      + summaryRow("Penalty", Number(report.score.total).toFixed(2))
+      + summaryRow("Hard rules", report.hard_errors.length ? `<span class="bad">${report.hard_errors.length} violation${report.hard_errors.length === 1 ? "" : "s"}</span>` : '<span class="ok">pass</span>')
+      + summaryRow("Leftovers", report.leftover_ids.length)
+      + (state.dirty ? summaryRow("Placements", '<span class="warn">unsaved edits</span>') : "");
+  }
+  const section = (title, view, rows) =>
+    `<section><h4><button type="button" class="summary-link" data-go="${view}">${title}</button></h4><dl>${rows}</dl></section>`;
+  byId("summary-body").innerHTML = section("Pool", "import", poolRows)
+    + section("Template", "configure", templateRows)
+    + section("Build", state.payload ? "review" : "compare", buildRows);
+}
+
+function setNavState(view, status, hint) {
+  const button = document.querySelector(`.nav-item[data-view="${view}"]`);
+  button.dataset.state = status;
+  byId(`hint-${view}`).textContent = hint;
+}
+
+function updateChrome() {
+  if (!state.options) return;
+  const hasPool = Boolean(state.pool);
+  const hasBuild = Boolean(state.payload);
+  const issues = validateTemplateForm();
+  const hardErrors = hasBuild ? state.payload.draft.report.hard_errors.length : 0;
+  const { solvers, similarities } = currentSelections();
+
+  setNavState("import", hasPool ? "done" : "ready", hasPool ? `${state.pool.tossup_count + state.pool.bonus_count} questions` : "Start here");
+  setNavState("configure", !hasPool ? "locked" : issues.length ? "attention" : state.feasibility && !state.feasibility.feasible ? "attention" : "done",
+    !hasPool ? "Needs a pool" : issues.length ? plural(issues.length, "issue") : state.feasibility?.feasible === false ? "Pool is short" : "Rules valid");
+  setNavState("compare", !hasPool ? "locked" : hasBuild ? "done" : "ready", !hasPool ? "Needs a pool" : hasBuild ? plural(state.payload.runs.length, "result") : "Ready to run");
+  setNavState("review", !hasBuild ? "locked" : state.dirty || hardErrors ? "attention" : "done",
+    !hasBuild ? "Run a build first" : state.dirty ? "Unsaved edits" : hardErrors ? `${plural(hardErrors, "violation")}` : "Rules pass");
+  setNavState("audit", hasBuild ? "ready" : "locked", hasBuild ? "Ready" : "Run a build first");
+  setNavState("export", !hasBuild ? "locked" : hardErrors ? "attention" : "ready", !hasBuild ? "Run a build first" : hardErrors ? "Fix violations" : "Ready");
+
+  const messages = {
+    configure: ["No pool loaded yet.", "You can edit rules now, but suggestions and the feasibility check need a pool.", "Import a pool", "import"],
+    compare: ["Import a question pool to build packets.", "Builds draw questions from the imported pool.", "Import a pool", "import"],
+    review: ["No draft to review yet.", hasPool ? "Run a build in Compare to create packet drafts." : "Import a pool, then run a build.", hasPool ? "Go to Compare" : "Import a pool", hasPool ? "compare" : "import"],
+    audit: ["No draft to audit yet.", hasPool ? "Run a build in Compare first." : "Import a pool, then run a build.", hasPool ? "Go to Compare" : "Import a pool", hasPool ? "compare" : "import"],
+    export: ["Nothing to export yet.", hasPool ? "Run a build in Compare first." : "Import a pool, then run a build.", hasPool ? "Go to Compare" : "Import a pool", hasPool ? "compare" : "import"],
+  };
+  const needs = { configure: hasPool, compare: hasPool, review: hasBuild, audit: hasBuild, export: hasBuild };
+  for (const [view, [title, text, cta, target]] of Object.entries(messages)) {
+    const box = byId(`empty-${view}`);
+    box.hidden = needs[view];
+    if (!needs[view] && box.dataset.target !== `${target}|${text}`) {
+      box.dataset.target = `${target}|${text}`;
+      box.innerHTML = `<div><strong>${escapeHtml(title)}</strong><span>${escapeHtml(text)}</span></div><button type="button" class="button secondary small" data-go="${target}">${escapeHtml(cta)}</button>`;
+    }
+  }
+  byId("apply-review").disabled = !hasBuild;
+  byId("run-audit").disabled = !hasBuild;
+  byId("export-packets").disabled = !hasBuild;
+
+  const gate = !hasPool ? "Import a pool to run a build."
+    : issues.length ? `Fix ${plural(issues.length, "issue")} on the Configure page before building.`
+    : !solvers.length ? "Select at least one solver."
+    : !similarities.length ? "Select at least one similarity scorer."
+    : "";
+  const run = byId("run-build");
+  if (!state.building) run.disabled = Boolean(gate);
+  byId("build-gate").hidden = !gate;
+  byId("build-gate").textContent = gate;
+
+  document.querySelectorAll(".page-nav").forEach((nav) => {
+    const hints = [];
+    nav.querySelectorAll("[data-requires]").forEach((button) => {
+      const missing = button.dataset.requires === "pool" ? !hasPool : !hasBuild;
+      button.disabled = missing;
+      if (missing) hints.push(button.dataset.requires === "pool" ? "Import a pool to continue." : "Run a build to continue.");
+    });
+    nav.querySelector(".page-nav-hint").textContent = hints[0] || "";
+  });
+  renderSummary(issues);
+}
+
+document.addEventListener("click", (event) => {
+  const link = event.target.closest(".summary-link, .empty-state [data-go]");
+  if (link) showView(link.dataset.go);
+});
+byId("notice-close").addEventListener("click", () => { byId("notice").hidden = true; });
+byId("view-compare").addEventListener("change", updateChrome);
+byId("view-compare").addEventListener("input", updateChrome);
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  if (document.activeElement?.classList.contains("tip")) document.activeElement.blur();
+  if (!byId("notice").hidden) byId("notice").hidden = true;
 });
 
 function download(blob, filename) {
@@ -1041,10 +1454,14 @@ function defaultPacketCount(templateId) {
   return 1;
 }
 
-initialize();
+initialize().then(() => {
+  state.startValue = byId("template-select").value;
+  state.initialized = true;
+  updateChrome();
+});
 
 window.addEventListener("beforeunload", (event) => {
-  if (!state.dirty) return;
+  if (!state.dirty && !state.templateDirty) return;
   event.preventDefault();
   event.returnValue = "";
 });

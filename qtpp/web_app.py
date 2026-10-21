@@ -63,6 +63,8 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                 result = self.workspace.audit(payload.get("request", ""))
             elif route == "/api/select-run":
                 result = self.workspace.select_run(payload.get("run_index"))
+            elif route == "/api/label":
+                result = self.workspace.label_pair(payload)
             elif route == "/api/export":
                 result = self.workspace.export()
             else:

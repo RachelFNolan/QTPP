@@ -19,6 +19,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics import average_precision_score, roc_auc_score
 
 from qtpp import SimilarityWeights, TfidfSimilarity, load_question_pool_csv, question_text
+from qtpp.label_store import DEFAULT_LABELS, load_labels, pair_key
 from qtpp.similarity import CombinedSimilarity, question_topics, tokenize
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -99,6 +100,22 @@ def build_scorers(pool, with_embeddings: bool, custom_weights=None) -> dict:
     return scorers
 
 
+def cached_pairs(pool, labels_path: Path, include_borderline: bool) -> list[dict]:
+    """Cached labels whose questions are in this pool and whose content hash still matches."""
+    texts = {q.metadata.id: question_text(q) for q in (*pool.tossups, *pool.bonuses)}
+    pairs = []
+    for key, record in load_labels(labels_path).items():
+        first, second = record["first_id"], record["second_id"]
+        if first not in texts or second not in texts or pair_key(texts[first], texts[second]) != key:
+            continue
+        if record["label"] == "borderline" and not include_borderline:
+            continue
+        pairs.append(
+            {"first_id": first, "second_id": second, "label": record["label"] == "similar"}
+        )
+    return pairs
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pairs", type=Path, default=DEFAULT_PAIRS)
@@ -106,18 +123,32 @@ def main() -> None:
     parser.add_argument("--embeddings", action="store_true")
     parser.add_argument("--include-borderline", action="store_true")
     parser.add_argument(
+        "--labels", type=Path, nargs="?", const=DEFAULT_LABELS,
+        help="evaluate against the label cache (default calibration/labels.jsonl) instead of --pairs",
+    )
+    parser.add_argument(
         "--weights", type=float, nargs=3, metavar=("TEXT", "SUBCATEGORY", "CATEGORY"),
         help="also score a custom SimilarityWeights blend",
     )
     args = parser.parse_args()
 
-    data = json.loads(args.pairs.read_text(encoding="utf-8"))
-    pairs = [
-        pair for pair in data["pairs"] if args.include_borderline or not pair["borderline"]
-    ]
-    labels = [int(pair["label"]) for pair in pairs]
-    print(f"{len(pairs)} pairs, {sum(labels)} related, reviewed={data['reviewed']}")
-    scorers = build_scorers(load_question_pool_csv(args.pool), args.embeddings, args.weights)
+    pool = load_question_pool_csv(args.pool)
+    if args.labels:
+        pairs = cached_pairs(pool, args.labels, args.include_borderline)
+        labels = [int(pair["label"]) for pair in pairs]
+        print(f"{len(pairs)} cached pairs for this pool, {sum(labels)} related")
+        if len(set(labels)) < 2 or len(pairs) < 100:
+            print("Too few cached labels for a stable evaluation; treat results as indicative only.")
+        if len(set(labels)) < 2:
+            return
+    else:
+        data = json.loads(args.pairs.read_text(encoding="utf-8"))
+        pairs = [
+            pair for pair in data["pairs"] if args.include_borderline or not pair["borderline"]
+        ]
+        labels = [int(pair["label"]) for pair in pairs]
+        print(f"{len(pairs)} pairs, {sum(labels)} related, reviewed={data['reviewed']}")
+    scorers = build_scorers(pool, args.embeddings, args.weights)
     print(f"{'scorer':34} {'AUC':>6} {'AP':>6} {'bestF1':>7} {'thresh':>7}")
     for name, scorer in scorers.items():
         scores = [scorer.score(pair["first_id"], pair["second_id"]) for pair in pairs]
