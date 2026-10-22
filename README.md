@@ -2,6 +2,9 @@
 
 QTPP is being built incrementally to organize quiz bowl tossups and bonuses into packets under ordering and topic constraints. The first increment defines a typed, Python-native model and imports the supplied packet JSON format. It uses only the Python standard library, keeping the domain model usable by later optimization or machine-learning components.
 
+For the packet penalty formula and how similarity is estimated, see
+[the scoring guide](./docs/scoring.md).
+
 ## Data model
 
 - A `QuestionSet` contains the full tossup and bonus pools, source set metadata, and zero or more ordered `Packet` objects.
