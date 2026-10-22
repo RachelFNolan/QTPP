@@ -9,8 +9,12 @@ from .model import Bonus, Difficulty, Packet, QuestionSet, Tossup
 
 
 def packet_filename(packet: Packet) -> str:
+    return f"{packet_stem(packet)}.json"
+
+
+def packet_stem(packet: Packet) -> str:
     slug = re.sub(r"[^A-Za-z0-9._-]+", "-", packet.name).strip("-.") or "packet"
-    return f"{packet.number:02d}_{slug}.json"
+    return f"{packet.number:02d}_{slug}"
 
 
 def packet_to_dict(question_set: QuestionSet, packet: Packet) -> dict[str, Any]:

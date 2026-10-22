@@ -16,6 +16,7 @@ const state = {
   templateDirty: false,
   feasibility: null,
   initialized: false,
+  authors: {},
 };
 
 const titles = {
@@ -24,14 +25,14 @@ const titles = {
   compare: "Compare build approaches",
   review: "Review and arrange packets",
   audit: "Investigate packet composition",
-  export: "Export packet JSON",
+  export: "Export packet files",
 };
 const demoStages = [
   ["configure", "Choose a ready-to-use template and packet count."],
   ["compare", "Select a solver and similarity scorer, then run one or more builds."],
   ["review", "Inspect a result, move or reorder questions, and recalculate validation."],
   ["audit", "Ask a composition question and review the evidence and likely conflicts."],
-  ["export", "Download the reviewed packet JSON files."],
+  ["export", "Download the reviewed packet files."],
 ];
 
 const byId = (id) => document.getElementById(id);
@@ -519,6 +520,7 @@ function renderOptions() {
 
 function updateRunState(payload) {
   byId("sweep-results").innerHTML = "";
+  byId("tune-results").innerHTML = "";
   state.payload = payload;
   state.dirty = false;
   state.layouts = payload.draft.packets.map((packet) => ({
@@ -1250,6 +1252,51 @@ byId("run-sweep").addEventListener("click", async (event) => {
   finally { state.sweeping = false; stopProgress(timer); setBusy(button, false); updateChrome(); }
 });
 
+function weightLine(weights) {
+  return `adjacent ${Number(weights.adjacent_category).toFixed(2)} · same packet ${Number(weights.same_packet).toFixed(2)} · nearby ${Number(weights.nearby).toFixed(2)}`;
+}
+
+function renderTune(result) {
+  const verdict = result.improved
+    ? `<div class="review-banner good"><strong>Better weights found:</strong> ${weightLine(result.best.weights)}.
+        On ${plural(result.held_out_seeds, "held-out seed")} they scored ${percent(result.best.held_out)} against ${percent(result.current.held_out)} for your weights (+${percent(result.gain)} ± ${percent(result.gain_error)}).
+        <div class="rerun-panel"><button type="button" class="button primary" id="apply-tuned" data-adjacent="${result.best.weights.adjacent_category}" data-packet="${result.best.weights.same_packet}" data-nearby="${result.best.weights.nearby}">Use these weights and re-run all builds</button></div></div>`
+    : `<div class="review-banner warn"><strong>Keep your weights.</strong> ${result.notes.map(escapeHtml).join(" ")}</div>`;
+  const partial = result.truncated ? `<div class="review-banner warn">${escapeHtml(result.notes[0])}</div>` : "";
+  const scorers = result.scorers.map((item) => `<li>${escapeHtml(item.name)} — started from the ${escapeHtml(item.starting_solver)} build (${percent(item.improvement)} better than random)</li>`).join("");
+  const rows = result.top.map((item, index) => `<tr><td>${index + 1}</td><td>${Number(item.weights.adjacent_category).toFixed(2)}</td><td>${Number(item.weights.same_packet).toFixed(2)}</td><td>${Number(item.weights.nearby).toFixed(2)}</td><td>${percent(item.quality)}</td><td>${percent(item.spread)}</td></tr>`).join("");
+  byId("tune-results").innerHTML = `${partial}${verdict}
+    <p class="small muted-text">${plural(result.evaluated_candidates, "candidate")} tried, ${plural(result.builds, "build")} in ${Number(result.seconds).toFixed(1)}s. Quality is the average improvement over random layouts with every term at weight 1; it never rewards lowering a weight.</p>
+    <h4>Starting builds</h4><ul class="small">${scorers}</ul>
+    <h4>Top candidates</h4>
+    <div class="audit-table-wrap"><table class="audit-table"><thead><tr><th>#</th><th>Adjacent</th><th>Same packet</th><th>Nearby</th><th>Quality</th><th>Spread across seeds</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+byId("run-tune").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  state.tuning = true;
+  setBusy(button, true, "Searching…");
+  const timer = startProgress("Searching for better weights", ["Building at many weight combinations", "Checking the winner on held-out seeds"]);
+  try {
+    renderTune(await api("/api/tune-weights", {
+      seeds: Number(byId("tune-seeds").value),
+      holdout: Number(byId("tune-holdout").value),
+      time_limit: Number(byId("tune-time").value),
+    }));
+  } catch (error) { setNotice(error.message, "error"); }
+  finally { state.tuning = false; stopProgress(timer); setBusy(button, false); updateChrome(); }
+});
+
+byId("tune-results").addEventListener("click", (event) => {
+  const button = event.target.closest("#apply-tuned");
+  if (!button) return;
+  if (state.dirty && !window.confirm("Re-running discards unrecalculated placement edits. Continue?")) return;
+  byId("weight-adjacent").value = button.dataset.adjacent;
+  byId("weight-packet").value = button.dataset.packet;
+  byId("weight-nearby").value = button.dataset.nearby;
+  byId("run-build").click();
+});
+
 byId("audit-results").addEventListener("click", async (event) => {
   const button = event.target.closest("#rerun-builds");
   if (!button) return;
@@ -1278,20 +1325,71 @@ byId("export-packets").addEventListener("click", async (event) => {
   setBusy(button, true, "Preparing files…");
   const timer = startProgress("Preparing export", ["Validating and rendering packet files"]);
   try {
+    const formats = [...document.querySelectorAll('input[name="export-format"]:checked')]
+      .map((input) => input.value);
+    if (!formats.length) throw new Error("Select at least one file format.");
     if (state.dirty) {
       const payload = await api("/api/review", { packets: state.layouts });
       updateRunState(payload);
       state.dirty = false;
     }
-    const result = await api("/api/export", {});
+    const selection = {
+      text_form: document.querySelector('input[name="export-text-form"]:checked').value,
+      include_answers: byId("export-answers").checked,
+      bonus_values: byId("export-bonus-values").checked,
+      bonus_modifiers: byId("export-bonus-modifiers").checked,
+      category_subcategory: byId("export-category").checked,
+      alternate_subcategory: byId("export-alternate").checked,
+      difficulty: byId("export-difficulty").checked,
+      source_question_id: byId("export-question-id").checked,
+      author: byId("export-author").checked,
+      front_set_name: byId("export-set-name").checked,
+      front_packet_name: byId("export-packet-name").checked,
+      front_authors: byId("export-front-authors").checked,
+    };
+    const result = await api("/api/export", { formats, selection, authors: state.authors, zip: true });
     result.files.forEach((file, index) => {
       window.setTimeout(() => {
-        download(new Blob([file.content], { type: "application/json" }), file.filename);
+        const content = file.content_base64
+          ? base64ToBytes(file.content_base64)
+          : file.content;
+        download(new Blob([content], { type: file.mime_type }), file.filename);
       }, index * 180);
     });
-    setNotice(`Prepared ${result.files.length} packet JSON file${result.files.length === 1 ? "" : "s"} for download.`, "success");
+    const count = result.packet_file_count ?? result.files.length;
+    setNotice(`Downloaded a zip with ${count} packet file${count === 1 ? "" : "s"} (${formats.join(", ")}).`, "success");
   } catch (error) { setNotice(error.message, "error"); }
   finally { stopProgress(timer); setBusy(button, false); updateChrome(); }
+});
+
+byId("authors-file").addEventListener("change", async (event) => {
+  const file = event.currentTarget.files[0];
+  if (!file) return;
+  try {
+    const parsed = JSON.parse(await file.text());
+    const authors = parsed?.authors;
+    if (!authors || typeof authors !== "object" || Array.isArray(authors)
+      || Object.entries(authors).some(([key, value]) => !key || typeof value !== "string")) {
+      throw new Error('Expected a JSON object shaped like {"authors":{"question-id":"name"}}.');
+    }
+    state.authors = authors;
+    byId("authors-status").textContent = `${Object.keys(authors).length} author mapping${Object.keys(authors).length === 1 ? "" : "s"} loaded from ${file.name}.`;
+    byId("clear-authors").disabled = false;
+    setNotice("Author map loaded for document export.", "success");
+  } catch (error) {
+    state.authors = {};
+    byId("authors-file").value = "";
+    byId("authors-status").textContent = "No author map loaded.";
+    byId("clear-authors").disabled = true;
+    setNotice(error.message, "error");
+  }
+});
+
+byId("clear-authors").addEventListener("click", () => {
+  state.authors = {};
+  byId("authors-file").value = "";
+  byId("authors-status").textContent = "No author map loaded.";
+  byId("clear-authors").disabled = true;
 });
 
 
@@ -1487,6 +1585,7 @@ function updateChrome() {
   byId("run-audit").disabled = !hasBuild;
   byId("sweep-card").hidden = !hasBuild;
   if (!state.sweeping) byId("run-sweep").disabled = !hasBuild;
+  if (!state.tuning) byId("run-tune").disabled = !hasBuild;
   byId("export-packets").disabled = !hasBuild;
 
   const gate = !hasPool ? "Import a pool to run a build."
@@ -1530,6 +1629,15 @@ function download(blob, filename) {
   anchor.download = filename;
   anchor.click();
   window.setTimeout(() => URL.revokeObjectURL(anchor.href), 1000);
+}
+
+function base64ToBytes(value) {
+  const binary = window.atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
 }
 function slug(value) {
   return String(value).normalize("NFKD").replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").toLowerCase() || "template";

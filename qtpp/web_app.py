@@ -57,6 +57,8 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                 result = self.workspace.suggest_template(payload)
             elif route == "/api/generate":
                 result = self.workspace.generate(payload)
+            elif route == "/api/tune-weights":
+                result = self.workspace.tune_weights(payload)
             elif route == "/api/weight-sweep":
                 result = self.workspace.weight_sweep(payload)
             elif route == "/api/rerun":
@@ -70,7 +72,7 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
             elif route == "/api/label":
                 result = self.workspace.label_pair(payload)
             elif route == "/api/export":
-                result = self.workspace.export()
+                result = self.workspace.export(payload)
             else:
                 self._json_response({"error": "Not found."}, status=404)
                 return

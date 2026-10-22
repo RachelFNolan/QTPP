@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import tempfile
 import unittest
@@ -129,6 +130,43 @@ class WorkspaceTests(unittest.TestCase):
         with self.assertRaises(WorkspaceError):
             self.workspace.weight_sweep({"factors": "2"})
 
+    def test_tune_weights_uses_a_fixed_yardstick_and_validates(self) -> None:
+        with self.assertRaises(WorkspaceError):
+            self.workspace.tune_weights({})
+        self.workspace.import_demo()
+        template = {**tiny_template(), "tossup_capacity": 3, "bonus_capacity": 3, "leftover_bounds": []}
+        self.workspace.generate(
+            {
+                "template": template,
+                "packet_count": 2,
+                "solvers": ["baseline"],
+                "similarities": ["balanced-tfidf"],
+                "baseline_samples": 3,
+            }
+        )
+        result = self.workspace.tune_weights({"seeds": 1, "holdout": 2})
+        self.assertEqual(result["current"]["weights"]["nearby"], 3.0)
+        self.assertEqual(result["scorers"][0]["similarity_id"], "balanced-tfidf")
+        self.assertGreaterEqual(result["evaluated_candidates"], 27)
+        self.assertEqual(result["improved"], result["best"]["weights"] != result["current"]["weights"] and result["improved"])
+        # Zeroing every weight must not look better: quality ignores the candidate weights.
+        by_weights = {tuple(item["weights"][t] for t in ("adjacent_category", "same_packet", "nearby")): item["quality"] for item in result["top"]}
+        self.assertTrue(all(quality <= result["best"]["quality"] + 1e-9 for quality in by_weights.values()))
+        for bad in ({"seeds": 0}, {"seeds": 6}, {"holdout": 9}, {"time_limit": 0}, {"time_limit": "x"}):
+            with self.assertRaises(WorkspaceError):
+                self.workspace.tune_weights(bad)
+
+    def test_tune_weights_reports_partial_results_on_time_limit(self) -> None:
+        self.workspace.import_demo()
+        template = {**tiny_template(), "tossup_capacity": 3, "bonus_capacity": 3, "leftover_bounds": []}
+        self.workspace.generate(
+            {"template": template, "packet_count": 2, "solvers": ["baseline"],
+             "similarities": ["balanced-tfidf"], "baseline_samples": 3}
+        )
+        result = self.workspace.tune_weights({"seeds": 1, "holdout": 1, "time_limit": 0.001})
+        self.assertTrue(result["truncated"])
+        self.assertLess(result["evaluated_candidates"], 33)
+
     def test_rerun_requires_a_build(self) -> None:
         with self.assertRaises(WorkspaceError):
             self.workspace.rerun({})
@@ -179,6 +217,7 @@ class WorkspaceTests(unittest.TestCase):
         self.assertEqual(reviewed["draft"]["report"]["hard_errors"], [])
         exported = self.workspace.export()
         self.assertEqual(len(exported["files"]), 1)
+        self.assertEqual(exported["files"][0]["mime_type"], "application/json")
 
         with tempfile.TemporaryDirectory() as output:
             Path(output, exported["files"][0]["filename"]).write_text(
@@ -188,6 +227,50 @@ class WorkspaceTests(unittest.TestCase):
         self.assertEqual(imported.metadata, tiny_pool().metadata)
         self.assertEqual(len(imported.packets), 1)
         self.assertEqual(imported.packets[0].tossups[0].question_id, "tu-1")
+
+    def test_document_export_formats_and_selection_validation(self) -> None:
+        self.workspace.generate(
+            {
+                "template": tiny_template(),
+                "packet_count": 1,
+                "solvers": ["baseline"],
+                "similarities": ["balanced-tfidf"],
+            }
+        )
+        exported = self.workspace.export(
+            {
+                "formats": ["docx", "pdf"],
+                "selection": {"include_answers": False},
+            }
+        )
+        self.assertEqual([file["filename"].rsplit(".", 1)[-1] for file in exported["files"]], ["docx", "pdf"])
+        self.assertTrue(
+            base64.b64decode(exported["files"][0]["content_base64"]).startswith(b"PK")
+        )
+        self.assertTrue(
+            base64.b64decode(exported["files"][1]["content_base64"]).startswith(b"%PDF-")
+        )
+        bundle = self.workspace.export({"formats": ["json", "docx", "pdf"], "zip": True})
+        self.assertEqual(len(bundle["files"]), 1)
+        self.assertTrue(bundle["files"][0]["filename"].endswith(".zip"))
+        self.assertEqual(bundle["packet_file_count"], 3)
+        import io, zipfile
+        with zipfile.ZipFile(io.BytesIO(base64.b64decode(bundle["files"][0]["content_base64"]))) as archive:
+            self.assertEqual(
+                sorted(name.rsplit(".", 1)[-1] for name in archive.namelist()),
+                ["docx", "json", "pdf"],
+            )
+            self.assertTrue(archive.read([n for n in archive.namelist() if n.endswith(".pdf")][0]).startswith(b"%PDF-"))
+        for invalid in (
+            {"formats": []},
+            {"formats": ["html"]},
+            {"formats": ["json", "json"]},
+            {"selection": {"unknown": True}},
+            {"authors": {"question-id": 1}},
+            [],
+        ):
+            with self.assertRaises(WorkspaceError):
+                self.workspace.export(invalid)
 
     def test_upload_imports_the_combined_bom_csv(self) -> None:
         sample_csv = (
@@ -282,6 +365,13 @@ class WorkspaceTests(unittest.TestCase):
                 self.assertEqual(audit["interpretation"]["century"], 20)
                 exported = self._post(server.server_port, "/api/export", {})
                 self.assertEqual(len(exported["files"]), 1)
+                document_export = self._post(
+                    server.server_port,
+                    "/api/export",
+                    {"formats": ["docx", "pdf"]},
+                )
+                self.assertEqual(len(document_export["files"]), 2)
+                self.assertEqual(document_export["files"][1]["mime_type"], "application/pdf")
             finally:
                 server.shutdown()
                 thread.join(timeout=2)

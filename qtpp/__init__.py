@@ -18,6 +18,8 @@ from .json_import import load_question_set
 from .pool_json_import import load_question_pool_json, parse_question_pool_json
 from .generation import GeneratedPackets, GenerationReport, build_question_set, generate_packets
 from .json_export import export_packets, packet_filename, packet_to_dict
+from .docx_export import export_packet_docx, render_packet_docx
+from .pdf_export import export_packet_pdf, render_packet_pdf
 from .document import (
     DocBonus,
     DocBonusPart,
@@ -79,6 +81,10 @@ __all__ = [
     "export_packets",
     "packet_filename",
     "packet_to_dict",
+    "export_packet_docx",
+    "render_packet_docx",
+    "export_packet_pdf",
+    "render_packet_pdf",
     "DocBonus",
     "DocBonusPart",
     "DocTossup",

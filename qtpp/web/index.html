@@ -53,7 +53,7 @@
           <article class="hero-card">
             <p class="eyebrow">START HERE</p>
             <h2>Turn a question pool into a reviewable draft.</h2>
-            <p>Import a combined Question Pool CSV or a raw JSON file of unpacketized tossups and bonuses, choose a distribution template, compare builds, then inspect and export packet JSON.</p>
+            <p>Import a combined Question Pool CSV or a raw JSON file of unpacketized tossups and bonuses, choose a distribution template, compare builds, then inspect and export packet files.</p>
             <div class="actions">
               <label class="button primary file-button" for="csv-file">Choose CSV or JSON</label>
               <input id="csv-file" type="file" accept=".csv,text/csv,.json,application/json">
@@ -238,6 +238,15 @@
           <p class="small muted-text">Re-runs the Python baseline for the selected build with each soft-score weight scaled up and down, one at a time, with the same seed. It shows which weights actually change the packets and how big each term is. Results from the stochastic search vary a little, so treat small differences as noise.</p>
           <button type="button" id="run-sweep" class="button secondary" disabled>Analyze weight sensitivity</button>
           <div id="sweep-results" aria-live="polite"></div>
+          <h3 class="tune-heading">Tune weights</h3>
+          <p class="small muted-text">Starts from the best build for each selected scorer, then tries many weight combinations with the Python baseline (CP-SAT only responds to the same-packet weight, so it is not searched). Each candidate is rated on a fixed yardstick that does not depend on the weights being tried: every term at weight 1, scaled by what random layouts score, averaged over terms and scorers. The winner is checked on seeds not used to choose it. Afterwards, apply the weights and re-run all builds to confirm.</p>
+          <div class="field-grid four">
+            <div class="field-row"><label for="tune-seeds">Seeds per candidate</label><input id="tune-seeds" type="number" min="1" max="5" step="1" value="2"></div>
+            <div class="field-row"><label for="tune-holdout">Held-out seeds</label><input id="tune-holdout" type="number" min="1" max="5" step="1" value="3"></div>
+            <div class="field-row"><label for="tune-time">Time limit (seconds)</label><input id="tune-time" type="number" min="10" max="600" step="10" value="120"></div>
+          </div>
+          <button type="button" id="run-tune" class="button secondary" disabled>Find best weights</button>
+          <div id="tune-results" aria-live="polite"></div>
         </article>
         <nav class="page-nav" aria-label="Step navigation"><button type="button" class="button secondary" data-go="configure">← Back: Configure</button><span class="page-nav-hint"></span><button type="button" class="button primary" data-go="review" data-requires="build">Next: Review →</button></nav>
       </section>
@@ -273,18 +282,61 @@
       <section class="view" id="view-export">
         <div class="empty-state" id="empty-export" data-view-name="export" hidden></div>
         <div class="section-heading">
-          <div><p class="eyebrow">FINAL OUTPUT</p><h2>Export packet JSON</h2></div>
-          <button id="export-packets" class="button primary">Download packet files</button>
+          <div><p class="eyebrow">FINAL OUTPUT</p><h2>Export packet files</h2></div>
+          <button id="export-packets" class="button primary">Download selected files</button>
+        </div>
+        <div class="card export-options">
+          <fieldset>
+            <legend>File formats</legend>
+            <label><input type="checkbox" name="export-format" value="json" checked> JSON</label>
+            <label><input type="checkbox" name="export-format" value="docx"> DOCX</label>
+            <label><input type="checkbox" name="export-format" value="pdf"> PDF</label>
+            <p class="small muted-text">Each packet is exported separately in every selected format, and all files download together in one .zip. JSON remains selected by default.</p>
+          </fieldset>
+          <details class="export-content">
+            <summary>Document contents</summary>
+            <div class="field-grid two">
+              <fieldset>
+                <legend>Question text</legend>
+                <label><input type="radio" name="export-text-form" value="raw" checked> Raw text with source formatting</label>
+                <label><input type="radio" name="export-text-form" value="sanitized"> Sanitized text</label>
+              </fieldset>
+              <fieldset>
+                <legend>Include in documents</legend>
+                <label><input type="checkbox" id="export-answers" checked> Answers</label>
+                <label><input type="checkbox" id="export-bonus-values" checked> Bonus values</label>
+                <label><input type="checkbox" id="export-bonus-modifiers" checked> Bonus difficulty modifiers</label>
+                <label><input type="checkbox" id="export-category"> Category and subcategory</label>
+                <label><input type="checkbox" id="export-alternate"> Alternate subcategory</label>
+                <label><input type="checkbox" id="export-difficulty"> Difficulty</label>
+                <label><input type="checkbox" id="export-question-id"> Source question IDs</label>
+                <label><input type="checkbox" id="export-author"> Authors</label>
+              </fieldset>
+              <fieldset>
+                <legend>Front matter</legend>
+                <label><input type="checkbox" id="export-set-name" checked> Set name and year</label>
+                <label><input type="checkbox" id="export-packet-name" checked> Packet name and number</label>
+                <label><input type="checkbox" id="export-front-authors" checked> Author list</label>
+              </fieldset>
+            </div>
+            <div class="field-row author-map">
+              <span class="small muted-text">Optional author map (JSON)</span>
+              <input id="authors-file" type="file" accept=".json,application/json">
+              <label for="authors-file" class="button secondary small file-button">Choose file</label>
+              <button id="clear-authors" type="button" class="button secondary small" disabled>Clear</button>
+              <small id="authors-status" class="small muted-text">No author map loaded. Expected shape: {"authors":{"question-id":"name"}}.</small>
+            </div>
+          </details>
         </div>
         <div id="export-summary" class="card export-summary">
-          <h3>Existing packet JSON format</h3>
-          <p>Each packet is downloaded as an individual JSON file. Export is blocked only when a hard rule is invalid or a packet is empty.</p>
+          <h3>Validated packet export</h3>
+          <p>Hard-rule violations and empty packets block every format. DOCX and PDF preserve source emphasis and the selected fields above. Your browser may ask permission for multiple downloads.</p>
           <p class="small muted-text">User-created templates are portable JSON files. Drafts remain in this browser session and can be exported again while the workspace is open.</p>
         </div>
         <nav class="page-nav" aria-label="Step navigation"><button type="button" class="button secondary" data-go="audit">← Back: Audit</button><span class="page-nav-hint"></span></nav>
       </section>
 
-      <footer class="app-footer"><span>QTPP local packet workspace</span><span>CSV in · reviewed JSON out</span></footer>
+      <footer class="app-footer"><span>QTPP local packet workspace</span><span>CSV in · reviewed packet files out</span></footer>
     </main>
   </div>
 </body>

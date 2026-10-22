@@ -5,3 +5,5 @@ scikit-learn>=1.4
 # Optional backends for utilities/suggest_families.py (either one).
 fastembed
 sentence-transformers
+# PDF content assertions in the document export tests.
+pypdf>=5.0

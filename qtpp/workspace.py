@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import base64
+import io
 import json
 import re
 import tempfile
 import threading
+import zipfile
 from dataclasses import dataclass, field
 from itertools import combinations
 from pathlib import Path
@@ -11,9 +14,12 @@ from typing import Any, Mapping, Sequence
 
 from . import cpsat_solver
 from .build_spec import PacketBuildSpec
+from .document import FieldSelection
+from .docx_export import export_packet_docx
 from .generation import GeneratedPackets, generate_packets
-from .json_export import packet_filename, packet_to_dict
+from .json_export import packet_filename, packet_stem, packet_to_dict
 from .model import Bonus, Packet, QuestionPlacement, QuestionSet, Tossup
+from .pdf_export import export_packet_pdf
 from .baseline_stats import (
     DEFAULT_SAMPLES,
     MAX_SAMPLES,
@@ -29,7 +35,7 @@ from .judged_scorer import (
     flagged_pairs_from_layouts,
     load_judgments,
 )
-from .weight_sweep import DEFAULT_FACTORS, sweep_weights
+from .weight_sweep import DEFAULT_FACTORS, sweep_weights, tune_weights
 from .label_store import DEFAULT_LABELS, append_label, label_summary, load_labels, pair_key
 from .scoring import PacketLayout, SoftWeights, score_layouts
 from .similarity import SimilarityWeights, build_similarity, question_text
@@ -476,6 +482,51 @@ class Workspace:
             result["similarity"] = _similarity_name(run.similarity_id)
             return result
 
+    def tune_weights(self, request: Mapping[str, Any]) -> dict[str, Any]:
+        """Search soft-score weights using the best build for each selected scorer."""
+        with self._lock:
+            pool = self._require_pool()
+            selected = self._require_run()
+            try:
+                weights = (
+                    _soft_weights(request["soft_weights"])
+                    if request.get("soft_weights") is not None
+                    else selected.weights
+                )
+                seeds = _integer(request.get("seeds", 2), "seeds")
+                holdout = _integer(request.get("holdout", 3), "holdout")
+                time_limit = request.get("time_limit", 120)
+                if isinstance(time_limit, bool) or not isinstance(time_limit, (int, float)):
+                    raise ValueError("time_limit must be a number of seconds.")
+                best_runs: dict[str, tuple[float, _Run]] = {}
+                for run in self._runs:
+                    improvement = run.normalized["improvement"][run.similarity_id]
+                    known = best_runs.get(run.similarity_id)
+                    if known is None or improvement > known[0]:
+                        best_runs[run.similarity_id] = (improvement, run)
+                result = tune_weights(
+                    pool,
+                    selected.spec,
+                    {key: run.scorer for key, (_, run) in best_runs.items()},
+                    weights,
+                    seed=selected.generated.report.seed,
+                    seeds=seeds,
+                    holdout=holdout,
+                    time_limit=float(time_limit),
+                )
+            except (InfeasibleError, TypeError, ValueError) as error:
+                raise WorkspaceError(str(error)) from error
+            result["scorers"] = [
+                {
+                    "similarity_id": key,
+                    "name": _similarity_name(key),
+                    "starting_solver": run.generated.report.solver,
+                    "improvement": improvement,
+                }
+                for key, (improvement, run) in best_runs.items()
+            ]
+            return result
+
     def select_run(self, index: int) -> dict[str, Any]:
         with self._lock:
             return self._select_run(index)
@@ -579,7 +630,7 @@ class Workspace:
                 "likely_conflicts": conflicts,
             }
 
-    def export(self) -> dict[str, Any]:
+    def export(self, request: Mapping[str, Any] | None = None) -> dict[str, Any]:
         with self._lock:
             pool = self._require_pool()
             draft = self._draft
@@ -592,21 +643,95 @@ class Workspace:
                 raise WorkspaceError(
                     "Resolve hard-rule violations before export: " + "; ".join(errors)
                 )
-            files = []
+            if request is None:
+                request = {}
+            elif not isinstance(request, Mapping):
+                raise WorkspaceError("Export request must be an object.")
+            formats = request.get("formats", ["json"])
+            if (
+                not isinstance(formats, list)
+                or not formats
+                or any(not isinstance(item, str) for item in formats)
+            ):
+                raise WorkspaceError("formats must be a non-empty array of format names.")
+            if len(formats) != len(set(formats)):
+                raise WorkspaceError("formats must not contain duplicates.")
+            unsupported = sorted(set(formats) - {"json", "docx", "pdf"})
+            if unsupported:
+                raise WorkspaceError(
+                    "Unsupported export format(s): " + ", ".join(unsupported)
+                )
+            selection_value = request.get("selection", {})
+            try:
+                selection = FieldSelection.from_dict(selection_value)
+            except (TypeError, ValueError) as error:
+                raise WorkspaceError(str(error)) from error
+            authors = request.get("authors", {})
+            if not isinstance(authors, Mapping) or any(
+                not isinstance(key, str) or not isinstance(value, str)
+                for key, value in authors.items()
+            ):
+                raise WorkspaceError("authors must be an object of question IDs and author names.")
             for packet in draft.packets:
                 if not packet.tossups and not packet.bonuses:
                     raise WorkspaceError(
                         f"Packet {packet.number} is empty and cannot be exported."
                     )
-                files.append(
-                    {
+
+            files: list[dict[str, str]] = []
+            for packet in draft.packets:
+                stem = packet_stem(packet)
+                if "json" in formats:
+                    files.append({
                         "filename": packet_filename(packet),
+                        "mime_type": "application/json",
                         "content": json.dumps(
                             packet_to_dict(draft, packet), indent=4, ensure_ascii=False
+                        ) + "\n",
+                    })
+                if "docx" in formats:
+                    try:
+                        content = export_packet_docx(draft, packet, selection, authors)
+                    except ImportError as error:
+                        raise WorkspaceError(str(error)) from error
+                    files.append({
+                        "filename": f"{stem}.docx",
+                        "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        "content_base64": base64.b64encode(content).decode("ascii"),
+                    })
+                if "pdf" in formats:
+                    try:
+                        content = export_packet_pdf(draft, packet, selection, authors)
+                    except ImportError as error:
+                        raise WorkspaceError(str(error)) from error
+                    files.append({
+                        "filename": f"{stem}.pdf",
+                        "mime_type": "application/pdf",
+                        "content_base64": base64.b64encode(content).decode("ascii"),
+                    })
+            if request.get("zip") is True:
+                archive = io.BytesIO()
+                with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as bundle:
+                    for item in files:
+                        data = (
+                            base64.b64decode(item["content_base64"])
+                            if "content_base64" in item
+                            else item["content"].encode("utf-8")
                         )
-                        + "\n",
-                    }
-                )
+                        bundle.writestr(item["filename"], data)
+                set_name = re.sub(
+                    r"[^A-Za-z0-9._-]+", "-", draft.metadata.name
+                ).strip("-.") or "packets"
+                return {
+                    "files": [
+                        {
+                            "filename": f"{set_name}-packets.zip",
+                            "mime_type": "application/zip",
+                            "content_base64": base64.b64encode(archive.getvalue()).decode("ascii"),
+                        }
+                    ],
+                    "packet_file_count": len(files),
+                }
             return {"files": files}
 
     def label_pair(self, request: Mapping[str, Any]) -> dict[str, Any]:
