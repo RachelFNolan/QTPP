@@ -233,6 +233,12 @@
         <section id="comparison-explainer" class="card explainer-card" hidden></section>
         <p id="build-gate" class="gate-note" hidden></p>
         <div id="comparison-results" class="results-grid"></div>
+        <article id="sweep-card" class="card sweep-card" hidden>
+          <h3>Weight sensitivity</h3>
+          <p class="small muted-text">Re-runs the Python baseline for the selected build with each soft-score weight scaled up and down, one at a time, with the same seed. It shows which weights actually change the packets and how big each term is. Results from the stochastic search vary a little, so treat small differences as noise.</p>
+          <button type="button" id="run-sweep" class="button secondary" disabled>Analyze weight sensitivity</button>
+          <div id="sweep-results" aria-live="polite"></div>
+        </article>
         <nav class="page-nav" aria-label="Step navigation"><button type="button" class="button secondary" data-go="configure">← Back: Configure</button><span class="page-nav-hint"></span><button type="button" class="button primary" data-go="review" data-requires="build">Next: Review →</button></nav>
       </section>
 

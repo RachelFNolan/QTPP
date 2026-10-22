@@ -57,6 +57,8 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                 result = self.workspace.suggest_template(payload)
             elif route == "/api/generate":
                 result = self.workspace.generate(payload)
+            elif route == "/api/weight-sweep":
+                result = self.workspace.weight_sweep(payload)
             elif route == "/api/rerun":
                 result = self.workspace.rerun(payload)
             elif route == "/api/review":

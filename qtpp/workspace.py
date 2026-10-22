@@ -29,6 +29,7 @@ from .judged_scorer import (
     flagged_pairs_from_layouts,
     load_judgments,
 )
+from .weight_sweep import DEFAULT_FACTORS, sweep_weights
 from .label_store import DEFAULT_LABELS, append_label, label_summary, load_labels, pair_key
 from .scoring import PacketLayout, SoftWeights, score_layouts
 from .similarity import SimilarityWeights, build_similarity, question_text
@@ -443,6 +444,37 @@ class Workspace:
         self._draft = runs[0].generated.question_set
         self._review_errors = ()
         return self._workspace_payload()
+
+    def weight_sweep(self, request: Mapping[str, Any]) -> dict[str, Any]:
+        """Show how sensitive the selected build is to each soft-score weight."""
+        with self._lock:
+            pool = self._require_pool()
+            run = self._require_run()
+            try:
+                weights = (
+                    _soft_weights(request["soft_weights"])
+                    if request.get("soft_weights") is not None
+                    else run.weights
+                )
+                factors = request.get("factors", DEFAULT_FACTORS)
+                if not isinstance(factors, (list, tuple)) or any(
+                    isinstance(item, bool) or not isinstance(item, (int, float)) for item in factors
+                ):
+                    raise ValueError("factors must be a list of numbers.")
+                result = sweep_weights(
+                    pool,
+                    run.spec,
+                    run.scorer,
+                    weights,
+                    seed=run.generated.report.seed,
+                    factors=factors,
+                )
+            except InfeasibleError as error:
+                raise WorkspaceError(str(error)) from error
+            except (TypeError, ValueError) as error:
+                raise WorkspaceError(str(error)) from error
+            result["similarity"] = _similarity_name(run.similarity_id)
+            return result
 
     def select_run(self, index: int) -> dict[str, Any]:
         with self._lock:

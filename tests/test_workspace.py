@@ -106,6 +106,29 @@ class WorkspaceTests(unittest.TestCase):
                 {"first_id": conflict["first_id"], "second_id": conflict["second_id"], "label": "similar"}
             )
 
+    def test_weight_sweep_reports_scale_and_sensitivity(self) -> None:
+        with self.assertRaises(WorkspaceError):
+            self.workspace.weight_sweep({})
+        self.workspace.import_demo()
+        template = {**tiny_template(), "tossup_capacity": 3, "bonus_capacity": 3, "leftover_bounds": []}
+        self.workspace.generate(
+            {
+                "template": template,
+                "packet_count": 2,
+                "solvers": ["baseline"],
+                "similarities": ["balanced-tfidf"],
+                "baseline_samples": 3,
+            }
+        )
+        result = self.workspace.weight_sweep({"factors": [0, 2]})
+        self.assertEqual(len(result["rows"]), 6)
+        self.assertAlmostEqual(sum(item["share"] for item in result["scale"]), 1.0)
+        self.assertTrue(all(0 <= row["membership_change"] <= 1 for row in result["rows"]))
+        with self.assertRaises(WorkspaceError):
+            self.workspace.weight_sweep({"factors": [-1]})
+        with self.assertRaises(WorkspaceError):
+            self.workspace.weight_sweep({"factors": "2"})
+
     def test_rerun_requires_a_build(self) -> None:
         with self.assertRaises(WorkspaceError):
             self.workspace.rerun({})

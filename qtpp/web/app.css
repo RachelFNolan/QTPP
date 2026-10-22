@@ -390,3 +390,9 @@ input[aria-invalid="true"] { border-color: var(--red); background: #fff7f6; }
 .rerun-panel p { margin: 0; font-size: 11px; line-height: 1.55; }
 .rerun-panel .inline-check { display: flex; align-items: flex-start; gap: 7px; font-size: 11px; }
 .rerun-panel button { justify-self: start; }
+
+.sweep-card { margin-top: 14px; display: grid; gap: 10px; }
+.sweep-card h4 { margin: 12px 0 4px; font-size: 12px; }
+.sweep-card button { justify-self: start; }
+
+.sweep-card[hidden] { display: none; }

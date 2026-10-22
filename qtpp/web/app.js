@@ -518,6 +518,7 @@ function renderOptions() {
 }
 
 function updateRunState(payload) {
+  byId("sweep-results").innerHTML = "";
   state.payload = payload;
   state.dirty = false;
   state.layouts = payload.draft.packets.map((packet) => ({
@@ -1218,6 +1219,37 @@ byId("audit-results").addEventListener("click", async (event) => {
     status.textContent = "Saved";
   } catch (error) { setNotice(error.message, "error"); }
 });
+const termNames = { adjacent_category: "Adjacent category", same_packet: "Same packet", nearby: "Nearby" };
+
+function renderSweep(result) {
+  const number = (value, digits = 2) => Number(value).toFixed(digits);
+  const scale = result.scale.map((item) => `<tr><td>${termNames[item.term]}</td><td>${number(item.weight)}</td><td>${number(item.raw, 3)}</td><td>${number(item.contribution, 3)}</td><td>${percent(item.share)}</td></tr>`).join("");
+  const rows = result.rows.map((row) => `<tr>
+    <td>${termNames[row.term]}</td><td>×${number(row.factor, 1)}</td><td>${number(row.weight)}</td>
+    <td>${number(row.raw.adjacent_category, 1)}</td><td>${number(row.raw.same_packet, 3)}</td><td>${number(row.raw.nearby, 3)}</td>
+    <td>${number(row.weighted_total, 3)}</td><td>${percent(row.membership_change)}</td><td>${percent(row.order_change)}</td></tr>`).join("");
+  const quiet = result.insensitive.length
+    ? `<div class="review-banner good"><strong>No visible effect:</strong> ${result.insensitive.map((term) => termNames[term]).join(", ")} — changing ${result.insensitive.length === 1 ? "this weight" : "these weights"} did not change the packets, so tuning ${result.insensitive.length === 1 ? "it" : "them"} is not worth the effort for this pool.</div>`
+    : "";
+  byId("sweep-results").innerHTML = `${quiet}
+    <h4>Size of each term at your current weights (${escapeHtml(result.similarity)})</h4>
+    <div class="audit-table-wrap"><table class="audit-table"><thead><tr><th>Term</th><th>Weight</th><th>Raw value</th><th>Weighted</th><th>Share of penalty</th></tr></thead><tbody>${scale}</tbody></table></div>
+    <h4>Each weight varied alone</h4>
+    <div class="audit-table-wrap"><table class="audit-table"><thead><tr><th>Weight varied</th><th>Multiplier</th><th>New value</th><th>Raw adjacent</th><th>Raw same packet</th><th>Raw nearby</th><th>Penalty at your weights</th><th>Pairings changed</th><th>Slots changed</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <p class="small muted-text">Raw values count each term at weight 1 so rows are comparable. “Pairings changed” is the share of same-packet pairs from your current build that are no longer together; “Slots changed” is the share of positions holding a different question. Penalty at your weights shows what each alternative costs under your actual preferences.</p>`;
+}
+
+byId("run-sweep").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  state.sweeping = true;
+  setBusy(button, true, "Analyzing…");
+  const timer = startProgress("Analyzing weight sensitivity", ["Re-running the baseline solver with varied weights"]);
+  try {
+    renderSweep(await api("/api/weight-sweep", {}));
+  } catch (error) { setNotice(error.message, "error"); }
+  finally { state.sweeping = false; stopProgress(timer); setBusy(button, false); updateChrome(); }
+});
+
 byId("audit-results").addEventListener("click", async (event) => {
   const button = event.target.closest("#rerun-builds");
   if (!button) return;
@@ -1453,6 +1485,8 @@ function updateChrome() {
   }
   byId("apply-review").disabled = !hasBuild;
   byId("run-audit").disabled = !hasBuild;
+  byId("sweep-card").hidden = !hasBuild;
+  if (!state.sweeping) byId("run-sweep").disabled = !hasBuild;
   byId("export-packets").disabled = !hasBuild;
 
   const gate = !hasPool ? "Import a pool to run a build."
