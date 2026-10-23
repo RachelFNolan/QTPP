@@ -47,6 +47,25 @@ suite when appropriate. Documentation-only changes should at minimum be
 checked for accurate commands, valid relative links, and consistency with the
 current UI and API.
 
+## Keeping documentation current
+
+Update documentation in the same change as the behavior it describes.
+
+| If you change... | Update... |
+|---|---|
+| Install/run commands, optional dependencies | [README](../README.md) quick start and this guide |
+| Browser workflow, UI labels, page order | [User guide](./user-guide.md), [guided walkthrough](./guided-walkthrough.md), [FAQ](./FAQ.md) |
+| Guided demo steps (`demoStages` in `qtpp/web/app.js`) | [Guided walkthrough](./guided-walkthrough.md) |
+| Import/export formats, templates, Python API, solvers | [Technical reference](./reference.md) |
+| Score terms, weights, similarity defaults | [Scoring guide](./scoring.md); [benchmark report](../STEP-2-BENCHMARK.md) if benchmarks are rerun |
+| New or moved documents | [Documentation index](./README.md) and root README links |
+| Shipped or dropped roadmap item | [Roadmap](../planning/ROADMAP.md) |
+
+Before finishing, check that relative links and heading anchors still resolve
+and that commands in the docs still run. The same checklist is in
+[`.github/copilot-instructions.md`](../.github/copilot-instructions.md) for
+AI assistants.
+
 ## Contribution conventions
 
 - Keep changes focused and consistent with the existing package and test
