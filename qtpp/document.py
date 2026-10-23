@@ -138,6 +138,19 @@ class DocBonusPart:
     modifier: str | None
 
 
+def format_bonus_part_marker(value: int | None, modifier: str | None) -> str:
+    modifier_label = (modifier or "").strip().lower()
+    modifier_label = {
+        "standard": "",
+        "easy": "e",
+        "medium": "m",
+        "hard": "h",
+    }.get(modifier_label, modifier_label)
+    if value is None and not modifier_label:
+        return ""
+    return f"[{value if value is not None else ''}{modifier_label}]"
+
+
 @dataclass(frozen=True, slots=True)
 class DocBonus:
     number: int

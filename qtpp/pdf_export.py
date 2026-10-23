@@ -10,6 +10,7 @@ from .document import (
     PacketDocument,
     Run,
     build_packet_document,
+    format_bonus_part_marker,
 )
 from .model import Packet, QuestionSet
 
@@ -21,8 +22,6 @@ def render_packet_pdf(document: PacketDocument) -> bytes:
     """Render a packet document as PDF bytes."""
     try:
         import reportlab
-        from reportlab.lib import colors
-        from reportlab.lib.enums import TA_CENTER
         from reportlab.lib.pagesizes import letter
         from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
         from reportlab.lib.units import inch
@@ -54,72 +53,74 @@ def render_packet_pdf(document: PacketDocument) -> bytes:
         italic="QTPPVera-Italic",
         boldItalic="QTPPVera-BoldItalic",
     )
+    pdfmetrics.registerFontFamily(
+        "Times-Roman",
+        normal="Times-Roman",
+        bold="Times-Bold",
+        italic="Times-Italic",
+        boldItalic="Times-BoldItalic",
+    )
 
     styles = getSampleStyleSheet()
     styles.add(
         ParagraphStyle(
             "QTPPTitle",
-            parent=styles["Title"],
-            fontName="QTPPVera-Bold",
-            fontSize=18,
-            leading=22,
-            alignment=TA_CENTER,
-            spaceAfter=8,
+            parent=styles["Normal"],
+            fontName="Times-Bold",
+            fontSize=10,
+            leading=13.2,
+            spaceAfter=0,
         )
     )
     styles.add(
         ParagraphStyle(
             "QTPPHeading",
-            parent=styles["Heading2"],
-            fontName="QTPPVera-Bold",
-            fontSize=13,
-            leading=16,
-            spaceBefore=12,
-            spaceAfter=6,
+            parent=styles["Normal"],
+            fontName="Times-Roman",
+            fontSize=10,
+            leading=13.2,
+            spaceBefore=13.2,
+            spaceAfter=13.2,
         )
     )
     styles.add(
         ParagraphStyle(
             "QTPPBody",
-            parent=styles["BodyText"],
-            fontName="QTPPVera",
-            fontSize=10.5,
-            leading=14,
-            spaceAfter=5,
+            parent=styles["Normal"],
+            fontName="Times-Roman",
+            fontSize=10,
+            leading=13.2,
+            spaceAfter=0,
         )
     )
     styles.add(
         ParagraphStyle(
             "QTPPAnswer",
-            parent=styles["BodyText"],
-            fontName="QTPPVera",
-            fontSize=9.5,
-            leading=12,
-            leftIndent=18,
-            spaceAfter=7,
+            parent=styles["Normal"],
+            fontName="Times-Roman",
+            fontSize=10,
+            leading=13.2,
+            spaceAfter=0,
         )
     )
     styles.add(
         ParagraphStyle(
             "QTPPDetails",
-            parent=styles["BodyText"],
-            fontName="QTPPVera-Italic",
-            fontSize=8,
-            leading=10,
-            leftIndent=18,
-            textColor=colors.HexColor("#555555"),
-            spaceAfter=5,
+            parent=styles["Normal"],
+            fontName="Times-Roman",
+            fontSize=10,
+            leading=13.2,
+            spaceAfter=0,
         )
     )
     styles.add(
         ParagraphStyle(
             "QTPPPart",
-            parent=styles["BodyText"],
-            fontName="QTPPVera",
+            parent=styles["Normal"],
+            fontName="Times-Roman",
             fontSize=10,
-            leading=13,
-            leftIndent=18,
-            spaceAfter=4,
+            leading=13.2,
+            spaceAfter=0,
         )
     )
 
@@ -129,44 +130,45 @@ def render_packet_pdf(document: PacketDocument) -> bytes:
         title = front.set_name
         if front.set_year is not None:
             title = f"{front.set_year} {title}"
-        story.append(Paragraph(_safe(title), styles["QTPPTitle"]))
+        story.append(Paragraph(_text_markup(title), styles["QTPPTitle"]))
     if front.packet_name:
         packet_label = front.packet_name
         if front.packet_number is not None:
             packet_label = f"Packet {front.packet_number}: {packet_label}"
-        story.append(Paragraph(_safe(packet_label), styles["Heading2"]))
+        story.append(Paragraph(_text_markup(packet_label), styles["QTPPBody"]))
     if front.authors:
-        story.append(Paragraph(_safe(", ".join(front.authors)), styles["QTPPBody"]))
-    if story:
-        story.append(Spacer(1, 0.12 * inch))
+        authors = f"Edited and written by {', '.join(front.authors)}"
+        story.append(Paragraph(_text_markup(authors), styles["QTPPBody"]))
 
     if document.tossups:
         story.append(Paragraph("Tossups", styles["QTPPHeading"]))
-        for tossup in document.tossups:
+        for index, tossup in enumerate(document.tossups):
             story.append(
                 Paragraph(
-                    f"<b>{tossup.number}.</b> {_runs_markup(tossup.question)}",
+                    f"{tossup.number}. {_runs_markup(tossup.question)}",
                     styles["QTPPBody"],
                 )
             )
             if tossup.answer is not None:
                 story.append(
                     Paragraph(
-                        f"<b>Answer:</b> {_runs_markup(tossup.answer)}",
+                        f"ANSWER: {_runs_markup(tossup.answer)}",
                         styles["QTPPAnswer"],
                     )
                 )
             if tossup.details:
-                    story.append(
-                        Paragraph(_details_markup(tossup.details), styles["QTPPDetails"])
-                    )
+                story.append(
+                    Paragraph(_details_markup(tossup.details), styles["QTPPDetails"])
+                )
+            if index + 1 < len(document.tossups):
+                story.append(Spacer(1, 13.2))
 
     if document.bonuses:
         story.append(Paragraph("Bonuses", styles["QTPPHeading"]))
-        for bonus in document.bonuses:
+        for index, bonus in enumerate(document.bonuses):
             story.append(
                 Paragraph(
-                    f"<b>{bonus.number}.</b> {_runs_markup(bonus.leadin)}",
+                    f"{bonus.number}. {_runs_markup(bonus.leadin)}",
                     styles["QTPPBody"],
                 )
             )
@@ -175,33 +177,29 @@ def render_packet_pdf(document: PacketDocument) -> bytes:
                     Paragraph(_details_markup(bonus.details), styles["QTPPDetails"])
                 )
             for part in bonus.parts:
-                markers = []
-                if part.value is not None:
-                    markers.append(f"{part.value} points")
-                if part.modifier:
-                    markers.append(part.modifier)
-                prefix = f"<b>{part.number}.</b> "
-                if markers:
-                    prefix += f"<i>({'; '.join(_safe(marker) for marker in markers)})</i> "
+                marker = format_bonus_part_marker(part.value, part.modifier)
+                prefix = f"{_text_markup(marker)} " if marker else ""
                 story.append(
                     Paragraph(prefix + _runs_markup(part.question), styles["QTPPPart"])
                 )
                 if part.answer is not None:
                     story.append(
                         Paragraph(
-                            f"<b>Answer:</b> {_runs_markup(part.answer)}",
+                            f"ANSWER: {_runs_markup(part.answer)}",
                             styles["QTPPAnswer"],
                         )
                     )
+            if index + 1 < len(document.bonuses):
+                story.append(Spacer(1, 13.2))
 
     stream = BytesIO()
     pdf = SimpleDocTemplate(
         stream,
         pagesize=letter,
-        rightMargin=0.75 * inch,
-        leftMargin=0.75 * inch,
-        topMargin=0.65 * inch,
-        bottomMargin=0.65 * inch,
+        rightMargin=inch,
+        leftMargin=inch,
+        topMargin=0.9 * inch,
+        bottomMargin=inch,
         title=front.packet_name or front.set_name or "Quiz bowl packet",
         author=", ".join(front.authors) if front.authors else None,
         pageCompression=1,
@@ -225,7 +223,7 @@ def export_packet_pdf(
 def _runs_markup(runs: tuple[Run, ...]) -> str:
     fragments: list[str] = []
     for run in runs:
-        text = _safe(run.text).replace("\n", "<br/>")
+        text = _text_markup(run.text).replace("\n", "<br/>")
         if run.underline:
             text = f"<u>{text}</u>"
         if run.italic:
@@ -240,9 +238,18 @@ def _safe(text: str) -> str:
     return escape(text, quote=False)
 
 
+def _text_markup(text: str) -> str:
+    escaped = _safe(text)
+    try:
+        text.encode("cp1252")
+    except UnicodeEncodeError:
+        return f'<font name="QTPPVera">{escaped}</font>'
+    return escaped
+
+
 def _details_markup(details: Mapping[str, str]) -> str:
-    fields: list[str] = [
-        f"<b>{_safe(label.replace('_', ' ').title())}:</b> {_safe(value)}"
+    fields = [
+        f"{_text_markup(label.replace('_', ' ').title())}: {_text_markup(value)}"
         for label, value in details.items()
     ]
-    return " · ".join(fields)
+    return f"&lt;{' · '.join(fields)}&gt;"
