@@ -1,6 +1,9 @@
-# QTPP
+# QTPP - The Question To Packet Pipeline
 
-QTPP is being built incrementally to organize quiz bowl tossups and bonuses into packets under ordering and topic constraints. The first increment defines a typed, Python-native model and imports the supplied packet JSON format. It uses only the Python standard library, keeping the domain model usable by later optimization or machine-learning components.
+QTPP ("Q-tip") is an app being built incrementally to help "packetize" quiz bowl tournament question sets in a way that adddresses the major "Feng Shui" issues that tend to arise. This app takes a pool of questions and arranges them into packets subject to user-defined hard rules such as "All packets have 4/4 History" and soft-rules such as "No two questions from the same major category should appear within 3 questions of each other" or "There shouldn't be more than one country tossup answerline per packet".
+
+It's very much a work in progress and most of this readme can probably be ignored. Progress is actively being made and features are being added/removed. As such, take a lot of this with a grain of salt.
+
 
 For the packet penalty formula and how similarity is estimated, see
 [the scoring guide](./docs/scoring.md).
