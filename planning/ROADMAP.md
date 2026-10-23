@@ -1,5 +1,8 @@
 # QTPP roadmap
 
+This is an internal working document for maintainers. Items are exploratory
+and are not user-facing commitments or a release schedule.
+
 Working notes on what to build next and what might be worth cutting. Items are judgments from building and testing the app so far, not commitments. Each entry says why it matters.
 
 ## Features to add
@@ -50,7 +53,7 @@ These are candidates, not recommendations to delete everything. Each has a cost 
 | **"Own penalty" ranking option** | Its UI says it is not comparable across scorers, so it mostly invites misreading. | Remove, or show raw penalties only inside each card. |
 | **CP-SAT solver** | It optimizes only the same-packet term, needs an optional dependency, and in tests it left flagged cross-type pairs in place unless hard separation was on. | Keep only if it clearly wins on real pools; otherwise drop it and the `separate` pathway. |
 | **Template suggestion modes** (mirror method, strictness, per-subcategory builder) | Three overlapping ways to fill quotas, plus presets, "Start from scratch", duplicate and reset. | Merge into one "Suggest from pool" action with a strictness choice. |
-| **Demo guide and sample data flow** | Useful for onboarding, but it adds state and code paths that real users never touch. | Keep the sample load and drop the staged guide once the README covers it. |
+| **Demo guide and sample data flow** | The guided sample is an onboarding route and has a dedicated walkthrough page. Its extra state is worth revisiting only if it creates concrete maintenance or usability problems. | Keep the sample and its user-facing walkthrough; simplify the guided state only if evidence shows it is not useful. |
 | **Calibration side files** (`similarity_pairs*.json`, the review markdown files, `sample_similarity_pairs.py`, `review_pairs.py`) | The label cache now holds the same judgments. Two stores for one purpose will drift. | After seeding is confirmed complete, keep one fixture format and delete the rest. |
 | **Committed `calibration/labels.jsonl`** | Appends from the web app change a tracked file during normal use, creating noisy diffs and merge conflicts as labels grow. | Keep for now as agreed. Revisit once labels are numerous, or move to a separate data file or repository. |
 
