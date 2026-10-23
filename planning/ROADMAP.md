@@ -19,12 +19,18 @@ Working notes on what to build next and what might be worth cutting. Items are j
 
 ### Review and audit
 
+- **Surface potential conflicts in Review.** Highlight likely-similar question
+  pairs within each packet on the Review and arrange page, so reviewers can
+  spot and address them while editing instead of needing to find them in Audit.
 - **Undo and redo in Review**, and drag-and-drop to reorder or move questions, in place of the up, down and move controls.
 - **Show more than the top 20 conflicts**, with filters by packet, category, label status and type pair, and a "label next unlabeled pair" flow to build the cache faster.
 - **Format question text in Audit** (the new pair view already does; the composition tables show plain IDs).
 - **Penalize consecutive bonuses in the same category.** Only tossups have an adjacency rule today.
 - **Explain hard-rule failures** with a suggested fix, for example which quota to loosen when a pool is infeasible or a hard separation can't be met.
 - **Flag or block a "too similar" pair at export** if it is still in one packet, as an option.
+- **Add an optional author-grouping hard rule.** Let users who need it keep
+  questions by the same author together in one packet, rather than spreading
+  that author's questions across packets.
 
 ### Similarity and labels
 
