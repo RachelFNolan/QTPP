@@ -4,6 +4,21 @@ QTPP ("Q-tip") is an app being built incrementally to help "packetize" quiz bowl
 
 It's very much a work in progress and most of this readme can probably be ignored. Progress is actively being made and features are being added/removed. As such, take a lot of this with a grain of salt.
 
+## Running the app
+
+From the repository root, start the local web app:
+
+```sh
+python3 -m qtpp.web_app
+```
+
+Open the printed address (by default, [http://127.0.0.1:8765](http://127.0.0.1:8765)) in your browser. Choose **Try the guided sample workflow** to get started with the included sample, or import your own CSV or JSON question pool. The app runs locally; press **Ctrl+C** in the terminal to stop it.
+
+The app itself uses only the Python standard library. To enable PDF and DOCX exports, install the optional document dependencies first:
+
+```sh
+python3 -m pip install -r requirements-export.txt
+```
 
 For the packet penalty formula and how similarity is estimated, see
 [the scoring guide](./docs/scoring.md).
