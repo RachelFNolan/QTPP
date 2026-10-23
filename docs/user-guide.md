@@ -90,9 +90,11 @@ before exporting.
 
 In **Audit**, check the build summary, remaining questions, adjacent tossups,
 and likely-similar within-packet pairs. Free-form audit requests currently
-recognize pool categories and some century references. Similarity is only a
-ranking signal: it does not prove two questions are duplicates or that players
-will find them confusing.
+recognize pool categories and some century references. Audit is under
+development and currently of very limited use; treat its findings as
+preliminary and review packet contents directly. Similarity is only a ranking
+signal: it does not prove two questions are duplicates or that players will
+find them confusing.
 
 Pair labels are saved in `calibration/labels.jsonl`; only question IDs and
 normalized-text hashes are stored, not question wording. This file is
