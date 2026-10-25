@@ -49,8 +49,7 @@ DEFAULT_TEMPLATES = Path(__file__).resolve().parent.parent / "templates"
 DEFAULT_DEMO = (
     Path(__file__).resolve().parent.parent
     / "Test Questions"
-    / "2025 ACF Winter"
-    / "Question Pool.csv"
+    / "2025 ACF Winter Question Pool.csv"
 )
 
 SIMILARITY_OPTIONS: dict[str, SimilarityWeights] = {

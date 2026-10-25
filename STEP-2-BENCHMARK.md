@@ -8,7 +8,7 @@ Run date: 2026-10-19
 - OR-Tools 9.15.6755
 - scikit-learn 1.6.1
 - fastembed 0.9.0; embedding backend `BAAI/bge-small-en-v1.5`
-- Solver pool/template: `Test Questions/2025 ACF Winter/Question Pool.csv` and `templates/acf-winter-final.json`
+- Solver pool/template: `Test Questions/2025 ACF Winter Question Pool.csv` and `templates/acf-winter-final.json`
 - Solver packet counts: 8, 12, and 16; seeds 0-2; CP-SAT time limit 30 seconds per run.
 - Similarity fixtures: reviewed Winter pairs and reviewed Fall pairs; borderline pairs excluded, as in the evaluator's default.
 

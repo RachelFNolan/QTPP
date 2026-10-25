@@ -56,7 +56,7 @@ Use `load_question_set` for an existing packet-set directory:
 ```python
 from qtpp import load_question_set
 
-question_set = load_question_set("Test Questions/2025 ACF Winter")
+question_set = load_question_set("path/to/packet-set-directory")
 print(question_set.metadata.name)
 print(len(question_set.packets))
 ```
@@ -92,7 +92,7 @@ Load the supplied combined pool with:
 from qtpp import load_question_pool_csv
 
 pool = load_question_pool_csv(
-    "Test Questions/2025 ACF Winter/Question Pool.csv"
+    "Test Questions/2025 ACF Winter Question Pool.csv"
 )
 print(len(pool.tossups), len(pool.bonuses))
 ```
@@ -215,6 +215,8 @@ Winter and Fall pair fixtures are used to compare candidate scorers:
 
 ```sh
 python3 -m calibration.evaluate_similarity
+# The Fall pool is not checked in (Test Questions subfolders are gitignored);
+# point --pool at your own copy.
 python3 -m calibration.evaluate_similarity \
   --pool "Test Questions/2025 ACF Fall/Question Pool.csv" \
   --pairs calibration/similarity_pairs_fall.json

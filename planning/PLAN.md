@@ -23,7 +23,7 @@ the optimizer dependency and user-facing UI as measured decisions.
 - [`qtpp/model.py`](../qtpp/model.py) — domain model (`QuestionSet`, `Packet`, `QuestionPlacement`, `Topic`, and `Difficulty`).
 - [`qtpp/json_import.py`](../qtpp/json_import.py) — packet JSON conventions and validation behavior.
 - [`utilities/generate_question_pool.py`](../utilities/generate_question_pool.py) — source of truth for CSV columns and bonus serialization.
-- [`Test Questions/2025 ACF Winter/Question Pool.csv`](../Test%20Questions/2025%20ACF%20Winter/Question%20Pool.csv) — representative real input and benchmark data.
+- [`Test Questions/2025 ACF Winter Question Pool.csv`](../Test%20Questions/2025%20ACF%20Winter%20Question%20Pool.csv) — representative real input and benchmark data.
 - [`qtpp/`](../qtpp/) — implementation modules for import, constraints/scoring, generation, export, and the browser app.
 - [`tests/`](../tests/) — focused tests; [`test_json_import.py`](../tests/test_json_import.py) is the JSON compatibility reference.
 - [`README.md`](../README.md) — project landing page; user workflow details now live in [`docs/`](../docs/).

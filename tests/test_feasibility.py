@@ -9,7 +9,7 @@ from qtpp import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-POOL = ROOT / "Test Questions" / "2025 ACF Winter" / "Question Pool.csv"
+POOL = ROOT / "Test Questions" / "2025 ACF Winter Question Pool.csv"
 FINAL = ROOT / "templates" / "acf-winter-final.json"
 
 

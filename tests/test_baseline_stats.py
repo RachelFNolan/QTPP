@@ -16,7 +16,7 @@ from qtpp.similarity import SimilarityWeights, build_similarity
 from qtpp.template_json import load_template
 
 ROOT = Path(__file__).resolve().parents[1]
-POOL = ROOT / "Test Questions" / "2025 ACF Winter" / "Question Pool.csv"
+POOL = ROOT / "Test Questions" / "2025 ACF Winter Question Pool.csv"
 
 
 class BaselineStatTests(unittest.TestCase):

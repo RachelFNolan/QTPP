@@ -10,6 +10,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SAMPLE_SET = PROJECT_ROOT / "Test Questions" / "2025 ACF Winter"
 
 
+@unittest.skipUnless(SAMPLE_SET.is_dir(), "sample packet JSON folder is not checked in")
 class LoadQuestionSetTests(unittest.TestCase):
     def test_loads_supplied_question_set(self) -> None:
         question_set = load_question_set(SAMPLE_SET)

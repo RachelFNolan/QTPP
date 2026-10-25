@@ -13,7 +13,7 @@ from qtpp.cpsat_solver import cp_model
 from qtpp.scoring import PacketLayout, SoftWeights, placement_penalty, score_packet
 
 ROOT = Path(__file__).resolve().parents[1]
-POOL = ROOT / "Test Questions" / "2025 ACF Winter" / "Question Pool.csv"
+POOL = ROOT / "Test Questions" / "2025 ACF Winter Question Pool.csv"
 TEMPLATE = ROOT / "templates" / "acf-winter-final.json"
 FALL_POOL = ROOT / "Test Questions" / "2025 ACF Fall" / "Question Pool.csv"
 FALL_TEMPLATE = ROOT / "templates" / "acf-fall-final.json"
@@ -74,6 +74,7 @@ class SolverTests(unittest.TestCase):
         with self.assertRaises(InfeasibleError):
             solve_baseline(self.pool, self.template.create_spec(40), self.scorer)
 
+    @unittest.skipUnless(FALL_POOL.exists(), "Fall sample pool is not checked in")
     def test_baseline_supports_grouped_fall_distribution(self) -> None:
         pool = load_question_pool_csv(FALL_POOL)
         template = load_template(FALL_TEMPLATE)
@@ -90,6 +91,7 @@ class SolverTests(unittest.TestCase):
         self.assertEqual(result.hard_errors, ())
 
     @unittest.skipIf(cp_model is None, "ortools not installed")
+    @unittest.skipUnless(FALL_POOL.exists(), "Fall sample pool is not checked in")
     def test_cpsat_supports_grouped_fall_distribution(self) -> None:
         pool = load_question_pool_csv(FALL_POOL)
         template = load_template(FALL_TEMPLATE)

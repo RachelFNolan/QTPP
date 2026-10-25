@@ -276,8 +276,7 @@ class WorkspaceTests(unittest.TestCase):
         sample_csv = (
             Path(__file__).resolve().parents[1]
             / "Test Questions"
-            / "2025 ACF Winter"
-            / "Question Pool.csv"
+            / "2025 ACF Winter Question Pool.csv"
         )
         content = sample_csv.read_text(encoding="utf-8-sig")
         workspace = Workspace(templates_dir=tempfile.mkdtemp(), labels_path=Path(tempfile.mkdtemp()) / "labels.jsonl")

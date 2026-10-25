@@ -23,7 +23,7 @@ from qtpp.label_store import DEFAULT_LABELS, load_labels, pair_key
 from qtpp.similarity import CombinedSimilarity, question_topics, tokenize
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_POOL = ROOT / "Test Questions" / "2025 ACF Winter" / "Question Pool.csv"
+DEFAULT_POOL = ROOT / "Test Questions" / "2025 ACF Winter Question Pool.csv"
 DEFAULT_PAIRS = ROOT / "calibration" / "similarity_pairs.json"
 
 

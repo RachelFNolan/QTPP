@@ -9,7 +9,9 @@ from utilities.generate_question_pool import generate_question_pool
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-SAMPLE_CSV = PROJECT_ROOT / "Test Questions" / "2025 ACF Winter" / "Question Pool.csv"
+SAMPLE_CSV = PROJECT_ROOT / "Test Questions" / "2025 ACF Winter Question Pool.csv"
+# Per-packet JSON folder lives in a gitignored directory, so it may be absent.
+SAMPLE_PACKETS_DIR = PROJECT_ROOT / "Test Questions" / "2025 ACF Winter"
 
 
 class LoadQuestionPoolCsvTests(unittest.TestCase):
@@ -128,10 +130,11 @@ class LoadQuestionPoolCsvTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "CSV row 3.*more fields"):
                 load_question_pool_csv(path)
 
+    @unittest.skipUnless(SAMPLE_PACKETS_DIR.is_dir(), "sample packet JSON folder is not checked in")
     def test_pool_generator_writes_new_set_metadata_columns(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             output = Path(temp_dir) / "Question Pool.csv"
-            generate_question_pool(SAMPLE_CSV.parent, output)
+            generate_question_pool(SAMPLE_PACKETS_DIR, output)
             with output.open(encoding="utf-8-sig", newline="") as source:
                 reader = csv.DictReader(source)
                 self.assertIn("set_standard", reader.fieldnames)

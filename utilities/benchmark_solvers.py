@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--pool", type=Path, default=ROOT / "Test Questions" / "2025 ACF Winter" / "Question Pool.csv")
+    parser.add_argument("--pool", type=Path, default=ROOT / "Test Questions" / "2025 ACF Winter Question Pool.csv")
     parser.add_argument("--template", type=Path, default=ROOT / "templates" / "acf-winter-final.json")
     parser.add_argument("--packets", type=int, nargs="+", default=[8, 12, 16])
     parser.add_argument("--seeds", type=int, default=3)

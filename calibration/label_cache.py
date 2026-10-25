@@ -19,7 +19,7 @@ from qtpp import load_question_pool_csv, question_text
 from qtpp.label_store import DEFAULT_LABELS, append_label, label_summary, load_labels, pair_key
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_POOL = ROOT / "Test Questions" / "2025 ACF Winter" / "Question Pool.csv"
+DEFAULT_POOL = ROOT / "Test Questions" / "2025 ACF Winter Question Pool.csv"
 DEFAULT_PAIRS = ROOT / "calibration" / "similarity_pairs.json"
 
 

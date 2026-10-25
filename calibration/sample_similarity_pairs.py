@@ -26,7 +26,7 @@ from qtpp import (
 from qtpp.similarity import primary_answer
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_POOL = ROOT / "Test Questions" / "2025 ACF Winter" / "Question Pool.csv"
+DEFAULT_POOL = ROOT / "Test Questions" / "2025 ACF Winter Question Pool.csv"
 DEFAULT_OUTPUT = ROOT / "calibration" / "similarity_pairs.json"
 
 _PROPER = re.compile(r"(?<![.!?]\s)(?<!^)\b[A-Z][a-z]{3,}\b")

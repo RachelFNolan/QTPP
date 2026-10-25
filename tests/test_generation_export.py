@@ -23,12 +23,13 @@ from qtpp import (
 from qtpp.model import Packet, QuestionSetMetadata
 
 ROOT = Path(__file__).resolve().parents[1]
-WINTER = ROOT / "Test Questions" / "2025 ACF Winter"
-FALL = ROOT / "Test Questions" / "2025 ACF Fall"
+WINTER = ROOT / "Test Questions" / "2025 ACF Winter Question Pool.csv"
+# The Fall pool lives in a gitignored folder, so it is only present on some machines.
+FALL = ROOT / "Test Questions" / "2025 ACF Fall" / "Question Pool.csv"
 
 
-def _generate(directory: Path, template: str, packets: int = 3, seed: int = 1):
-    pool = load_question_pool_csv(directory / "Question Pool.csv")
+def _generate(pool_csv: Path, template: str, packets: int = 3, seed: int = 1):
+    pool = load_question_pool_csv(pool_csv)
     spec = load_template(ROOT / "templates" / template).create_spec(packets)
     return pool, generate_packets(
         pool, spec, build_similarity(pool), seed=seed, iterations=300
@@ -81,12 +82,14 @@ class GenerationExportTests(unittest.TestCase):
                 )
 
     def test_round_trips_through_importer(self) -> None:
-        for directory, template in (
+        for pool_csv, template in (
             (WINTER, "acf-winter-final.json"),
             (FALL, "acf-fall-final.json"),
         ):
-            pool, generated = _generate(directory, template, packets=2)
-            with self.subTest(directory=directory.name), tempfile.TemporaryDirectory() as out:
+            if not pool_csv.exists():
+                continue
+            pool, generated = _generate(pool_csv, template, packets=2)
+            with self.subTest(pool=pool_csv.parent.name), tempfile.TemporaryDirectory() as out:
                 export_packets(generated.question_set, out)
                 loaded = load_question_set(out)
                 original = generated.question_set

@@ -16,7 +16,7 @@ from qtpp import (
 )
 from qtpp.similarity import CombinedSimilarity, primary_answer
 
-POOL = Path(__file__).resolve().parents[1] / "Test Questions" / "2025 ACF Winter" / "Question Pool.csv"
+POOL = Path(__file__).resolve().parents[1] / "Test Questions" / "2025 ACF Winter Question Pool.csv"
 
 
 class SimilarityTests(unittest.TestCase):
