@@ -17,7 +17,8 @@ $$
 
 where:
 
-- \(A\) is the number of adjacent tossup pairs in the same broad category.
+- \(A\) is the number of adjacent pairs in the same broad category, counted within each
+  packet's tossup sequence and its bonus sequence.
 - \(P\) is the sum of pairwise similarity scores for every pair of questions
   within each packet, across both tossups and bonuses. Order does not matter
   for this term.

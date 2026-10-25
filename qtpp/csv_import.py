@@ -113,6 +113,7 @@ def load_question_pool_csv(path: str | Path) -> QuestionSet:
                         alternate_subcategory=_optional_text(row.get("alternate_subcategory")),
                     ),
                     difficulty=_question_difficulty(row.get("difficulty"), label),
+                    author=_optional_text((row.get("author") or "").strip()),
                 )
                 question_raw = _required(row, "question_raw", label)
                 answer_raw = _required(row, "answer_raw", label)

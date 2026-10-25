@@ -38,6 +38,18 @@ pool. The supplied CSV combines tossups and bonuses into one file and keeps a
 [technical reference](./reference.md#importing-pools) for format details and
 the supported Python import functions.
 
+After you choose a file and press **Map fields & import**, a mapping screen
+lists every QTPP field (question, answer, category, subcategory, author, bonus
+lead-in and parts, and more) with a dropdown of your file's columns (JSON keys
+appear as dotted paths such as `packet.name`). Known names are pre-filled as
+"matched" and close names as "suggested"; change any choice, then import. Your
+file does not need QTPP's exact column names. Category, subcategory, and either
+tossup question/answer or bonus lead-in/parts must be mapped; missing question
+IDs, set name, set year, and question type get defaults. Bonuses can be mapped
+as numbered part/answer column pairs, a list field, or a JSON-parts column.
+A mapped Author is kept with each question and used automatically when you
+export with authors (an author-map file, if loaded, takes precedence).
+
 You can also drag a CSV or JSON file onto the Import card. Import errors should
 identify the file, row, or field that needs attention. Resolve those before
 configuring a build.
@@ -88,7 +100,7 @@ between packets, and reorder them. Recalculation updates numbering, hard-rule
 validation, leftovers, and the selected draft's soft score. Revalidate edits
 before exporting.
 
-In **Audit**, check the build summary, remaining questions, adjacent tossups,
+In **Audit**, check the build summary, remaining questions, adjacent tossups and bonuses,
 and likely-similar within-packet pairs. Free-form audit requests currently
 recognize pool categories and some century references. Audit is under
 development and currently of very limited use; treat its findings as

@@ -172,6 +172,7 @@ def _parse_question_metadata(
             alternate_subcategory=alternate_subcategory,
         ),
         difficulty=_parse_question_difficulty(row.get("difficulty"), path),
+        author=_optional_string(row.get("author") or None, f"{path}: question.author"),
     )
     return metadata, _integer(row.get("number"), f"{path}: question.number")
 

@@ -138,13 +138,11 @@ def order_penalty(
     categories: Mapping[str, str],
     scorer: PairScorer,
     weights: SoftWeights,
-    *,
-    adjacency: bool,
 ) -> float:
     """Order-dependent penalty for one tossup or bonus sequence."""
     total = 0.0
     for index, first in enumerate(sequence):
-        if adjacency and index + 1 < len(sequence):
+        if index + 1 < len(sequence):
             if categories[first] == categories[sequence[index + 1]]:
                 total += weights.adjacent_category
         for distance in range(1, weights.window + 1):
@@ -177,11 +175,11 @@ def optimize_order(
     for kind, sequence in enumerate(sequences):
         if len(sequence) < 2:
             continue
-        current = order_penalty(sequence, categories, scorer, weights, adjacency=kind == 0)
+        current = order_penalty(sequence, categories, scorer, weights)
         for _ in range(passes):
             first, second = rng.sample(range(len(sequence)), 2)
             sequence[first], sequence[second] = sequence[second], sequence[first]
-            candidate = order_penalty(sequence, categories, scorer, weights, adjacency=kind == 0)
+            candidate = order_penalty(sequence, categories, scorer, weights)
             if candidate < current - 1e-12:
                 current = candidate
             else:
@@ -202,8 +200,8 @@ def _optimize_separated(
 ) -> PacketLayout:
     def cost(sequences: list[list[str]]) -> tuple[int, float]:
         conflicts = len(separation_conflicts(sequences[0], sequences[1], selector_of, separation))
-        soft = order_penalty(sequences[0], categories, scorer, weights, adjacency=True)
-        soft += order_penalty(sequences[1], categories, scorer, weights, adjacency=False)
+        soft = order_penalty(sequences[0], categories, scorer, weights)
+        soft += order_penalty(sequences[1], categories, scorer, weights)
         return conflicts, soft
 
     best: list[list[str]] | None = None

@@ -164,6 +164,38 @@ def solve_cpsat(
                                 if index.category_of[q] == category
                             ]
                             model.Add(packet_sum(category_questions, p) <= 1)
+                    if (
+                        group.minimum_distinct_categories
+                        or group.maximum_distinct_categories is not None
+                        or group.disjoint_types
+                    ):
+                        used_flags = []
+                        for category in group.categories:
+                            type_flags = {}
+                            for question_type in ("tossup", "bonus"):
+                                category_type_questions = [
+                                    q
+                                    for q in by_type[question_type]
+                                    if index.category_of[q] == category
+                                ]
+                                flag = model.NewBoolVar(f"g_{p}_{category}_{question_type}")
+                                if category_type_questions:
+                                    total = packet_sum(category_type_questions, p)
+                                    model.Add(total >= 1).OnlyEnforceIf(flag)
+                                    model.Add(total == 0).OnlyEnforceIf(flag.Not())
+                                else:
+                                    model.Add(flag == 0)
+                                type_flags[question_type] = flag
+                            used = model.NewBoolVar(f"g_{p}_{category}_used")
+                            model.AddMaxEquality(used, list(type_flags.values()))
+                            used_flags.append(used)
+                            if group.disjoint_types:
+                                model.AddBoolOr(
+                                    [type_flags["tossup"].Not(), type_flags["bonus"].Not()]
+                                )
+                        model.Add(sum(used_flags) >= group.minimum_distinct_categories)
+                        if group.maximum_distinct_categories is not None:
+                            model.Add(sum(used_flags) <= group.maximum_distinct_categories)
 
     for quota in spec.aggregate_quotas:
         total = sum(packet_sum(matching(quota.selector), p) for p in packets)

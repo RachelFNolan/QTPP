@@ -115,6 +115,9 @@ class CategoryCountGroup:
     minimum_per_category: int = 0
     maximum_per_category_per_type: int | None = None
     distinct_categories: bool = False
+    minimum_distinct_categories: int = 0
+    maximum_distinct_categories: int | None = None
+    disjoint_types: bool = False
 
     def __post_init__(self) -> None:
         if not self.categories or any(
@@ -146,6 +149,27 @@ class CategoryCountGroup:
             )
         if self.distinct_categories and self.total_count > len(self.categories):
             raise ValueError("distinct category group total cannot exceed its category count")
+        if not _nonnegative_int(self.minimum_distinct_categories):
+            raise ValueError("minimum_distinct_categories must be a non-negative integer")
+        if self.maximum_distinct_categories is not None and (
+            not _nonnegative_int(self.maximum_distinct_categories)
+            or self.maximum_distinct_categories == 0
+        ):
+            raise ValueError("maximum_distinct_categories must be a positive integer or None")
+        upper = min(len(self.categories), self.total_count)
+        if self.minimum_distinct_categories > upper:
+            raise ValueError(
+                "minimum_distinct_categories cannot exceed the group's category count or total"
+            )
+        if (
+            self.maximum_distinct_categories is not None
+            and self.maximum_distinct_categories < self.minimum_distinct_categories
+        ):
+            raise ValueError("maximum_distinct_categories cannot be below minimum_distinct_categories")
+        if not isinstance(self.disjoint_types, bool):
+            raise ValueError("disjoint_types must be a boolean")
+        if self.disjoint_types and self.minimum_per_type > 0 and len(self.categories) < 2:
+            raise ValueError("disjoint_types needs at least two categories")
 
 
 @dataclass(frozen=True, slots=True)
@@ -389,6 +413,40 @@ def validate_distribution(
                                         f"{group.maximum_per_category_per_type} "
                                         f"{question_type} from {category}"
                                     )
+                    category_type_totals = {
+                        (category, question_type): sum(
+                            count
+                            for selector, count in counts.items()
+                            if selector.category == category
+                            and selector.question_type == question_type
+                        )
+                        for category in group.categories
+                        for question_type in QUESTION_TYPES
+                    }
+                    used_categories = sum(
+                        1
+                        for category in group.categories
+                        if any(category_type_totals[category, t] for t in QUESTION_TYPES)
+                    )
+                    if used_categories < group.minimum_distinct_categories or (
+                        group.maximum_distinct_categories is not None
+                        and used_categories > group.maximum_distinct_categories
+                    ):
+                        rule_errors.append(
+                            f"group {group.categories} must use between "
+                            f"{group.minimum_distinct_categories} and "
+                            f"{group.maximum_distinct_categories or len(group.categories)} "
+                            f"different categories, not {used_categories}"
+                        )
+                    if group.disjoint_types and any(
+                        category_type_totals[category, "tossup"]
+                        and category_type_totals[category, "bonus"]
+                        for category in group.categories
+                    ):
+                        rule_errors.append(
+                            f"group {group.categories} cannot use a category for both "
+                            f"tossups and bonuses"
+                        )
                     if group.distinct_categories:
                         for category in group.categories:
                             category_total = sum(

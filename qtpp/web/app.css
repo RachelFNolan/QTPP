@@ -409,3 +409,16 @@ input[aria-invalid="true"] { border-color: var(--red); background: #fff7f6; }
 
 .sweep-card[hidden] { display: none; }
 .tune-heading { margin: 18px 0 0; }
+
+.mapping-card { margin-bottom: 18px; }
+.mapping-card h3 { margin: 0 0 4px; }
+.mapping-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 4px 18px; margin: 14px 0; }
+.mapping-grid .field-row { margin-bottom: 8px; }
+.mapping-group { grid-column: 1 / -1; margin: 8px 0 0; color: #5f6d82; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.mapping-tag { margin-left: 6px; font-weight: 600; }
+.mapping-tag.suggested { color: #17664f; }
+.mapping-tag.required { color: #b4332f; }
+.mapping-parts .part-pair { display: grid; grid-template-columns: auto 1fr 1fr; gap: 8px; align-items: center; margin-bottom: 6px; }
+.mapping-preview { overflow-x: auto; margin-top: 10px; }
+.mapping-preview table { border-collapse: collapse; font-size: 11px; }
+.mapping-preview th, .mapping-preview td { border: 1px solid var(--line); padding: 4px 8px; text-align: left; vertical-align: top; max-width: 260px; }

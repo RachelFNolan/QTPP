@@ -73,7 +73,8 @@ def score_packet(
     """Soft penalty for one packet; lower is better."""
     adjacent = sum(
         1
-        for first, second in zip(layout.tossups, layout.tossups[1:])
+        for sequence in (layout.tossups, layout.bonuses)
+        for first, second in zip(sequence, sequence[1:])
         if categories[first] == categories[second]
     )
     same_packet = sum(
@@ -122,7 +123,7 @@ def placement_penalty(
             continue
         distance = abs(position - index)
         total += weights.nearby * scorer.score(question_id, sequence[position]) / distance
-        if is_tossup and distance == 1 and categories[question_id] == categories[sequence[position]]:
+        if distance == 1 and categories[question_id] == categories[sequence[position]]:
             total += weights.adjacent_category
     return total
 

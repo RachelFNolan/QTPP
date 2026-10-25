@@ -139,11 +139,33 @@ class Workspace:
         pool = self._load_csv_path(self.demo_csv)
         return self._set_pool(pool)
 
-    def import_csv(self, content: str, filename: str = "question-pool.csv") -> dict[str, Any]:
+    @staticmethod
+    def inspect_import(content: str, filename: str, kind: str) -> dict[str, Any]:
+        from .field_mapping import inspect_csv, inspect_json
+
+        if not isinstance(content, str) or not content.strip():
+            raise WorkspaceError("Choose a non-empty file.")
+        if not isinstance(filename, str) or not filename:
+            filename = "question-pool"
+        try:
+            return inspect_json(content, filename) if kind == "json" else inspect_csv(content, filename)
+        except ValueError as error:
+            raise WorkspaceError(str(error)) from error
+
+    def import_csv(
+        self, content: str, filename: str = "question-pool.csv", mapping: Any = None
+    ) -> dict[str, Any]:
         if not isinstance(content, str) or not content.strip():
             raise WorkspaceError("Choose a non-empty CSV file.")
         if not isinstance(filename, str) or not filename:
             filename = "question-pool.csv"
+        if mapping is not None:
+            from .field_mapping import mapped_csv_text
+
+            try:
+                content = mapped_csv_text(content, mapping, filename)
+            except ValueError as error:
+                raise WorkspaceError(str(error)) from error
         with tempfile.NamedTemporaryFile(
             mode="w", encoding="utf-8-sig", suffix=".csv", delete=False
         ) as temporary:
@@ -157,7 +179,10 @@ class Workspace:
             temporary_path.unlink(missing_ok=True)
         return self._set_pool(pool)
 
-    def import_json(self, content: str, filename: str = "question-pool.json") -> dict[str, Any]:
+    def import_json(
+        self, content: str, filename: str = "question-pool.json", mapping: Any = None
+    ) -> dict[str, Any]:
+        from .field_mapping import mapped_pool_json
         from .pool_json_import import parse_question_pool_json
 
         if not isinstance(content, str) or not content.strip():
@@ -165,6 +190,8 @@ class Workspace:
         if not isinstance(filename, str) or not filename:
             filename = "question-pool.json"
         try:
+            if mapping is not None:
+                content = mapped_pool_json(content, mapping, filename)
             pool = parse_question_pool_json(content, filename)
         except (OSError, ValueError) as error:
             raise WorkspaceError(str(error)) from error
@@ -178,6 +205,14 @@ class Workspace:
             return load_question_pool_csv(path)
         except (OSError, ValueError) as error:
             raise WorkspaceError(str(error)) from error
+
+    @staticmethod
+    def _pool_authors(pool: QuestionSet) -> dict[str, str]:
+        return {
+            question.metadata.id: question.metadata.author
+            for question in (*pool.tossups, *pool.bonuses)
+            if question.metadata.author
+        }
 
     def _set_pool(self, pool: QuestionSet) -> dict[str, Any]:
         with self._lock:
@@ -212,6 +247,7 @@ class Workspace:
                 },
                 "tossup_count": len(pool.tossups),
                 "bonus_count": len(pool.bonuses),
+                "author_count": len(self._pool_authors(pool)),
                 "categories": {
                     category: sorted(subcategories)
                     for category, subcategories in sorted(categories.items())
@@ -672,6 +708,7 @@ class Workspace:
                 for key, value in authors.items()
             ):
                 raise WorkspaceError("authors must be an object of question IDs and author names.")
+            authors = {**self._pool_authors(self._require_pool()), **authors}
             for packet in draft.packets:
                 if not packet.tossups and not packet.bonuses:
                     raise WorkspaceError(
@@ -1132,18 +1169,19 @@ def _conflict_findings(
                     "reason": "High pairwise text/topic similarity; review for repeated material.",
                 }
             )
-        for first, second in zip(layout.tossups, layout.tossups[1:]):
-            if first in categories and second in categories and categories[first] == categories[second]:
-                candidates.append(
-                    {
-                        "packet": packet_number,
-                        "first_id": first,
-                        "second_id": second,
-                        "similarity": round(scorer.score(first, second), 4),
-                        "shared_category": True,
-                        "reason": "Adjacent tossups share a category.",
-                    }
-                )
+        for kind, sequence in (("tossups", layout.tossups), ("bonuses", layout.bonuses)):
+            for first, second in zip(sequence, sequence[1:]):
+                if first in categories and second in categories and categories[first] == categories[second]:
+                    candidates.append(
+                        {
+                            "packet": packet_number,
+                            "first_id": first,
+                            "second_id": second,
+                            "similarity": round(scorer.score(first, second), 4),
+                            "shared_category": True,
+                            "reason": f"Adjacent {kind} share a category.",
+                        }
+                    )
     candidates.sort(
         key=lambda item: (
             item["similarity"],

@@ -43,11 +43,19 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
             payload = self._read_json()
             if route == "/api/import":
                 result = self.workspace.import_csv(
-                    payload.get("csv", ""), payload.get("filename", "question-pool.csv")
+                    payload.get("csv", ""),
+                    payload.get("filename", "question-pool.csv"),
+                    payload.get("mapping"),
                 )
             elif route == "/api/import-json":
                 result = self.workspace.import_json(
-                    payload.get("json", ""), payload.get("filename", "question-pool.json")
+                    payload.get("json", ""),
+                    payload.get("filename", "question-pool.json"),
+                    payload.get("mapping"),
+                )
+            elif route == "/api/inspect-import":
+                result = self.workspace.inspect_import(
+                    payload.get("content", ""), payload.get("filename", ""), payload.get("kind", "csv")
                 )
             elif route == "/api/demo":
                 result = self.workspace.import_demo()

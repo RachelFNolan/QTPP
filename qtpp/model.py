@@ -34,6 +34,7 @@ class QuestionMetadata:
     id: str
     topic: Topic
     difficulty: Difficulty | None = None
+    author: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

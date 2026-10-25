@@ -39,6 +39,16 @@ question_set = QuestionSet(
 
 ## Importing pools
 
+### Field mapping
+
+`qtpp.field_mapping` backs the web import's mapping screen. `inspect_csv` /
+`inspect_json` return the file's columns (dotted paths for nested JSON), sample
+rows, and a suggested mapping from `suggest_mapping`; `mapped_csv_text` /
+`mapped_pool_json` rewrite a file into the canonical layouts below using a
+mapping. The web API exposes `POST /api/inspect-import` and an optional
+`mapping` on `/api/import` and `/api/import-json`. Without a mapping, the
+importers behave as before. `QuestionMetadata.author` holds an optional author.
+
 ### Packet JSON
 
 Use `load_question_set` for an existing packet-set directory:
@@ -119,6 +129,13 @@ grouped rules instead of enumerating all combinations. Template loading
 validates the schema version and rule structure and reports errors with the
 file path.
 
+Each group in a grouped rule also accepts `minimum_distinct_categories` and
+`maximum_distinct_categories` (how many different categories of the group a
+packet may use) and `disjoint_types` (no category supplies both a tossup and a
+bonus within the group). For example, a group of Geography, Current Events, and
+Other Academic with `"total": 3, "minimum_per_type": 1, "disjoint_types": true`
+draws its tossups and bonuses from separate categories.
+
 Tossup–bonus separation is represented in the spec as
 `separation: {window, by_category, by_subcategory}`. Within a packet, the
 configured topic matches are excluded when the absolute difference between
@@ -153,7 +170,7 @@ it must provide `score(first_id, second_id)` in `[0, 1]`. The optional
 embedding experiments are described in the
 [benchmark report](../STEP-2-BENCHMARK.md).
 
-`SoftWeights` control the soft penalties for adjacent same-category tossups,
+`SoftWeights` control the soft penalties for adjacent same-category tossups and bonuses,
 similar questions in one packet, and similar questions near each other in the
 ordered tossup or bonus sequence. Read [the scoring guide](./scoring.md)
 before comparing raw scores from different scorers.

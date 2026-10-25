@@ -194,6 +194,7 @@ def _sample_profile(
                 }
                 used_categories: set[str] = set()
                 category_counts: Counter[str] = Counter()
+                types_by_category: dict[str, set[str]] = {}
                 picked_count = 0
                 for question_type in ("tossup", "bonus"):
                     for _ in range(needed[question_type]):
@@ -234,12 +235,28 @@ def _sample_profile(
                                 or missing_category_slots == 0
                                 or selector.category in missing_categories
                             )
+                            and not (
+                                group.disjoint_types
+                                and types_by_category.get(selector.category, {question_type})
+                                != {question_type}
+                            )
+                            and not (
+                                group.maximum_distinct_categories is not None
+                                and selector.category not in used_categories
+                                and len(used_categories) >= group.maximum_distinct_categories
+                            )
+                            and not (
+                                selector.category in used_categories
+                                and len(used_categories) + slots_left - 1
+                                < group.minimum_distinct_categories
+                            )
                         ]
                         chosen = pick(candidates)
                         if chosen is None:
                             return None
                         counts[chosen] += 1
                         used_categories.add(chosen.category)
+                        types_by_category.setdefault(chosen.category, set()).add(question_type)
                         category_counts[chosen.category] += 1
                         picked_count += 1
 

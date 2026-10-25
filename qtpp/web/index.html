@@ -57,7 +57,7 @@
             <div class="actions">
               <label class="button primary file-button" for="csv-file">Choose CSV or JSON</label>
               <input id="csv-file" type="file" accept=".csv,text/csv,.json,application/json">
-              <button id="import-csv" class="button secondary" disabled>Import selected file</button>
+              <button id="import-csv" class="button secondary" disabled>Map fields &amp; import</button>
             </div>
             <p id="selected-file" class="drop-hint">or drag and drop a CSV or JSON file here</p>
             <button id="load-demo" class="text-button">Try the guided sample workflow <span aria-hidden="true">→</span></button>
@@ -70,6 +70,7 @@
             <p class="small">The sample workflow uses the repository's 2025 ACF Winter pool.</p>
           </article>
         </div>
+        <article id="mapping-panel" class="card mapping-card" hidden aria-live="polite"></article>
         <article id="pool-summary" class="card pool-card" hidden></article>
         <nav class="page-nav" aria-label="Step navigation"><span></span><span class="page-nav-hint"></span><button type="button" class="button primary" data-go="configure" data-requires="pool">Next: Configure →</button></nav>
       </section>

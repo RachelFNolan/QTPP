@@ -3,6 +3,7 @@ import unittest
 from qtpp.scoring import (
     CachedScorer,
     PacketLayout,
+    placement_penalty,
     SoftWeights,
     score_layouts,
     score_packet,
@@ -10,13 +11,13 @@ from qtpp.scoring import (
 
 
 class _Table:
-    def __init__(self, values):
+    def __init__(self, values: dict[frozenset[str], float]) -> None:
         self.values = values
         self.calls = 0
 
-    def score(self, first, second):
+    def score(self, first_id: str, second_id: str) -> float:
         self.calls += 1
-        return self.values.get(frozenset((first, second)), 0.0)
+        return self.values.get(frozenset((first_id, second_id)), 0.0)
 
 
 CATEGORIES = {"t1": "History", "t2": "History", "t3": "Science", "b1": "History", "b2": "Science"}
@@ -54,6 +55,26 @@ class ScoringTests(unittest.TestCase):
             SoftWeights(window=0)
         with self.assertRaises(ValueError):
             SoftWeights(nearby=-1)
+
+    def test_penalizes_adjacent_same_category_bonuses(self) -> None:
+        scorer = _Table({})
+        weights = SoftWeights(adjacent_category=10.0)
+        adjacent = PacketLayout((), ("b1", "t1", "b2"))
+        categories = {**CATEGORIES, "t1": "History"}
+        self.assertEqual(score_packet(adjacent, categories, scorer, weights).adjacent_category, 10.0)
+        separated = PacketLayout((), ("b1", "b2", "t1"))
+        self.assertEqual(score_packet(separated, categories, scorer, weights).adjacent_category, 0.0)
+
+    def test_placement_penalty_counts_adjacent_bonuses(self) -> None:
+        scorer = _Table({})
+        weights = SoftWeights(adjacent_category=10.0)
+        neighbor_is_science = ["b2", "b1"]
+        self.assertEqual(
+            placement_penalty([], neighbor_is_science, False, 1, "t3", CATEGORIES, scorer, weights), 10.0
+        )
+        self.assertEqual(
+            placement_penalty([], neighbor_is_science, False, 1, "t1", CATEGORIES, scorer, weights), 0.0
+        )
 
 
 if __name__ == "__main__":

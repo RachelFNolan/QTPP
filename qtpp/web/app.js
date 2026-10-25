@@ -829,7 +829,7 @@ function selectImportFile(file) {
   state.selectedFile = file || null;
   byId("import-csv").disabled = !state.selectedFile;
   byId("selected-file").textContent = file
-    ? `Selected: ${file.name} (${(file.size / 1024).toFixed(file.size < 10240 ? 1 : 0)} KB). Press “Import selected file”.`
+    ? `Selected: ${file.name} (${(file.size / 1024).toFixed(file.size < 10240 ? 1 : 0)} KB). Press “Map fields & import”.`
     : "or drag and drop a CSV or JSON file here";
 }
 byId("csv-file").addEventListener("change", (event) => selectImportFile(event.target.files[0]));
@@ -853,18 +853,96 @@ dropZone.addEventListener("drop", (event) => {
   selectImportFile(file);
   showView("import", { focus: false });
 });
+const NONE_OPTION = "";
+let mappingState = null;
+
+function mappingOptions(columns, selected) {
+  return `<option value="${NONE_OPTION}">(none)</option>` + columns
+    .map((column) => `<option value="${escapeHtml(column)}"${column === selected ? " selected" : ""}>${escapeHtml(column)}</option>`)
+    .join("");
+}
+
+function renderMapping() {
+  const { inspection, mapping, confidence, filename } = mappingState;
+  const { columns, fields } = inspection;
+  let group = "";
+  const rows = fields.map((field) => {
+    const heading = field.group !== group ? `<p class="mapping-group">${escapeHtml(field.group)}</p>` : "";
+    group = field.group;
+    const tag = field.required
+      ? '<span class="mapping-tag required">required</span>'
+      : confidence[field.key] ? `<span class="mapping-tag suggested">${confidence[field.key] === "exact" ? "matched" : "suggested"}</span>` : "";
+    return `${heading}<div class="field-row"><label for="map-${field.key}">${escapeHtml(field.label)}${tag}</label>
+      <select id="map-${field.key}" data-map="${field.key}">${mappingOptions(columns, mapping[field.key])}</select></div>`;
+  }).join("");
+  const pairs = mapping.bonus_parts.map((pair, index) => `<div class="part-pair"><span class="small">Part ${index + 1}</span>
+      <select data-pair="${index}" data-side="question" aria-label="Part ${index + 1} question">${mappingOptions(columns, pair.question)}</select>
+      <select data-pair="${index}" data-side="answer" aria-label="Part ${index + 1} answer">${mappingOptions(columns, pair.answer)}</select></div>`).join("");
+  const header = columns.map((column) => `<th>${escapeHtml(column)}</th>`).join("");
+  const body = inspection.sample.map((row) => `<tr>${columns.map((column) => `<td>${escapeHtml(row[column] ?? "")}</td>`).join("")}</tr>`).join("");
+  const panel = byId("mapping-panel");
+  panel.hidden = false;
+  panel.innerHTML = `
+    <p class="eyebrow">MATCH YOUR FILE</p>
+    <h3>Map fields from ${escapeHtml(filename)}</h3>
+    <p class="small muted-text">${inspection.row_count.toLocaleString()} rows found. Choose which ${inspection.kind === "json" ? "key" : "column"} holds each field; matched and suggested choices are pre-filled. Fields that are not in your file can stay “(none)”.</p>
+    <div class="mapping-grid">${rows}</div>
+    <p class="mapping-group">Bonus parts: one question/answer ${inspection.kind === "json" ? "key" : "column"} pair per part (or use the list/JSON fields above)</p>
+    <div class="mapping-parts">${pairs}</div>
+    <button type="button" class="button secondary small" id="mapping-add-part">Add bonus part</button>
+    <details class="mapping-preview" open><summary class="small">Preview of your file</summary><table><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table></details>
+    <div class="actions" style="margin-top:14px">
+      <button type="button" class="button primary" id="mapping-import">Import with this mapping</button>
+      <button type="button" class="button secondary" id="mapping-cancel">Cancel</button>
+    </div>`;
+  panel.querySelectorAll("[data-map]").forEach((select) => select.addEventListener("change", () => {
+    mapping[select.dataset.map] = select.value || null;
+    delete confidence[select.dataset.map];
+  }));
+  panel.querySelectorAll("[data-pair]").forEach((select) => select.addEventListener("change", () => {
+    mapping.bonus_parts[Number(select.dataset.pair)][select.dataset.side] = select.value || null;
+  }));
+  byId("mapping-add-part").addEventListener("click", () => {
+    mapping.bonus_parts.push({ question: null, answer: null });
+    renderMapping();
+  });
+  byId("mapping-cancel").addEventListener("click", () => { panel.hidden = true; mappingState = null; });
+  byId("mapping-import").addEventListener("click", importWithMapping);
+}
+
+async function importWithMapping(event) {
+  const button = event.currentTarget;
+  const { content, filename, isJson, mapping } = mappingState;
+  setBusy(button, true, "Importing…");
+  try {
+    const pool = isJson
+      ? await api("/api/import-json", { json: content, filename, mapping })
+      : await api("/api/import", { csv: content, filename, mapping });
+    byId("mapping-panel").hidden = true;
+    mappingState = null;
+    poolLoaded(pool, filename);
+    const authors = pool.author_count ? ` Authors found for ${pool.author_count} questions.` : "";
+    setNotice(`Imported ${pool.tossup_count} tossups and ${pool.bonus_count} bonuses.${authors}`, "success");
+  } catch (error) { setNotice(error.message, "error"); }
+  finally { setBusy(button, false); }
+}
+
 byId("import-csv").addEventListener("click", async (event) => {
   const button = event.currentTarget;
   if (!state.selectedFile) return;
-  setBusy(button, true, "Importing…");
+  setBusy(button, true, "Reading file…");
   try {
+    const filename = state.selectedFile.name;
     const content = await state.selectedFile.text();
-    const isJson = /\.json$/i.test(state.selectedFile.name);
-    const pool = isJson
-      ? await api("/api/import-json", { json: content, filename: state.selectedFile.name })
-      : await api("/api/import", { csv: content, filename: state.selectedFile.name });
-    poolLoaded(pool, state.selectedFile.name);
-    setNotice(`Imported ${pool.tossup_count} tossups and ${pool.bonus_count} bonuses.`, "success");
+    const isJson = /\.json$/i.test(filename);
+    const inspection = await api("/api/inspect-import", { content, filename, kind: isJson ? "json" : "csv" });
+    mappingState = {
+      inspection, content, filename, isJson,
+      mapping: structuredClone(inspection.suggestion.mapping),
+      confidence: { ...inspection.suggestion.confidence },
+    };
+    renderMapping();
+    byId("mapping-panel").scrollIntoView({ behavior: "smooth", block: "nearest" });
   } catch (error) { setNotice(error.message, "error"); }
   finally { setBusy(button, false); }
 });

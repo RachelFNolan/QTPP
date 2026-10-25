@@ -171,6 +171,9 @@ def _rule_to_dict(
                     "minimum_per_category": group.minimum_per_category,
                     "maximum_per_category_per_type": group.maximum_per_category_per_type,
                     "distinct_categories": group.distinct_categories,
+                    "minimum_distinct_categories": group.minimum_distinct_categories,
+                    "maximum_distinct_categories": group.maximum_distinct_categories,
+                    "disjoint_types": group.disjoint_types,
                 }
                 for group in rule.groups
             ],
@@ -223,6 +226,9 @@ def _pattern_rule_from_dict(
                         "maximum_per_category_per_type"
                     ),
                     distinct_categories=group.get("distinct_categories", False),
+                    minimum_distinct_categories=group.get("minimum_distinct_categories", 0),
+                    maximum_distinct_categories=group.get("maximum_distinct_categories"),
+                    disjoint_types=group.get("disjoint_types", False),
                 )
                 for group in groups
             ),
