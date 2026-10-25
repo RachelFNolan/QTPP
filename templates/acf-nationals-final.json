@@ -1,0 +1,360 @@
+{
+  "schema_version": 1,
+  "name": "ACF Nationals",
+  "tossup_capacity": 20,
+  "bonus_capacity": 20,
+  "quotas": [
+    {
+      "selector": {
+        "question_type": "tossup",
+        "category": "Literature",
+        "subcategory": "American Literature"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "tossup",
+        "category": "Literature",
+        "subcategory": "British Literature"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "tossup",
+        "category": "Literature",
+        "subcategory": "European Literature"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "tossup",
+        "category": "Literature",
+        "subcategory": "World Literature"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "tossup",
+        "category": "History",
+        "subcategory": "American History"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "tossup",
+        "category": "History",
+        "subcategory": "European History"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "tossup",
+        "category": "History",
+        "subcategory": "World History"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "tossup",
+        "category": "History",
+        "subcategory": "Other History"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "tossup",
+        "category": "Science",
+        "subcategory": "Biology"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "tossup",
+        "category": "Science",
+        "subcategory": "Chemistry"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "tossup",
+        "category": "Science",
+        "subcategory": "Physics"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "tossup",
+        "category": "Science",
+        "subcategory": "Other Science"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "tossup",
+        "category": "Fine Arts",
+        "subcategory": "Visual Fine Arts"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "tossup",
+        "category": "Fine Arts",
+        "subcategory": "Auditory Fine Arts"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "tossup",
+        "category": "Fine Arts",
+        "subcategory": "Other Fine Arts"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "tossup",
+        "category": "Social Science",
+        "subcategory": "Social Science"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "tossup",
+        "category": "Philosophy",
+        "subcategory": "Philosophy"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "bonus",
+        "category": "Literature",
+        "subcategory": "American Literature"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "bonus",
+        "category": "Literature",
+        "subcategory": "British Literature"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "bonus",
+        "category": "Literature",
+        "subcategory": "European Literature"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "bonus",
+        "category": "Literature",
+        "subcategory": "World Literature"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "bonus",
+        "category": "History",
+        "subcategory": "American History"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "bonus",
+        "category": "History",
+        "subcategory": "European History"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "bonus",
+        "category": "History",
+        "subcategory": "World History"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "bonus",
+        "category": "History",
+        "subcategory": "Other History"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "bonus",
+        "category": "Science",
+        "subcategory": "Biology"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "bonus",
+        "category": "Science",
+        "subcategory": "Chemistry"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "bonus",
+        "category": "Science",
+        "subcategory": "Physics"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "bonus",
+        "category": "Science",
+        "subcategory": "Other Science"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "bonus",
+        "category": "Fine Arts",
+        "subcategory": "Visual Fine Arts"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "bonus",
+        "category": "Fine Arts",
+        "subcategory": "Auditory Fine Arts"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "bonus",
+        "category": "Fine Arts",
+        "subcategory": "Other Fine Arts"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "bonus",
+        "category": "Social Science",
+        "subcategory": "Social Science"
+      },
+      "minimum": 1,
+      "maximum": 1
+    },
+    {
+      "selector": {
+        "question_type": "bonus",
+        "category": "Philosophy",
+        "subcategory": "Philosophy"
+      },
+      "minimum": 1,
+      "maximum": 1
+    }
+  ],
+  "allowed_patterns": [
+    {
+      "name": "Other: Religion/Myth + Geography/Current Events/Other Academic",
+      "counts": {
+        "tossup": 3,
+        "bonus": 3
+      },
+      "groups": [
+        {
+          "categories": [
+            "Religion",
+            "Mythology"
+          ],
+          "total": 3,
+          "minimum_per_type": 1
+        },
+        {
+          "categories": [
+            "Geography",
+            "Current Events",
+            "Other Academic"
+          ],
+          "total": 3,
+          "minimum_per_type": 1,
+          "maximum_per_category_per_type": 1
+        }
+      ]
+    }
+  ],
+  "leftover_bounds": [
+    {
+      "question_type": "tossup",
+      "minimum": 0,
+      "maximum": null
+    },
+    {
+      "question_type": "bonus",
+      "minimum": 0,
+      "maximum": null
+    }
+  ],
+  "separation": {
+    "window": 2,
+    "by_category": true,
+    "by_subcategory": true
+  }
+}
