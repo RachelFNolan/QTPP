@@ -65,6 +65,39 @@ class WorkspaceTests(unittest.TestCase):
         self.workspace = Workspace(templates_dir=tempfile.mkdtemp(), labels_path=Path(tempfile.mkdtemp()) / "labels.jsonl")
         self.workspace._set_pool(tiny_pool())
 
+    def test_pool_summary_counts_distinct_nonblank_alternate_subcategories(self) -> None:
+        pool = QuestionSet(
+            metadata=QuestionSetMetadata(id="summary-set", name="Summary Set", year=2025, standard=True),
+            tossups=(
+                Tossup(
+                    QuestionMetadata("tu-1", Topic("History", "World History", "Europe")),
+                    "Question",
+                    "Answer",
+                ),
+                Tossup(
+                    QuestionMetadata("tu-2", Topic("History", "American History", "Europe")),
+                    "Question",
+                    "Answer",
+                ),
+                Tossup(
+                    QuestionMetadata("tu-3", Topic("History", "Ancient History", " ")),
+                    "Question",
+                    "Answer",
+                ),
+                Tossup(
+                    QuestionMetadata("tu-4", Topic("Science", "Biology")),
+                    "Question",
+                    "Answer",
+                ),
+            ),
+        )
+        self.workspace._set_pool(pool)
+
+        self.assertEqual(
+            self.workspace.pool_summary()["alternate_subcategory_counts"],
+            {"History": 1, "Science": 0},
+        )
+
     def test_label_pair_appends_and_audit_reports_saved_label(self) -> None:
         self.workspace.generate(
             {

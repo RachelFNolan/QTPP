@@ -225,6 +225,8 @@ def suggest_with_taxonomy(
     curated = curated or {}
     suggestions: list[Suggestion] = []
     for category in taxonomy.categories.values():
+        if not category.labels:
+            continue
         names = [label.name for label in category.labels]
         candidates = [
             question

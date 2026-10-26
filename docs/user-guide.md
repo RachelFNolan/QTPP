@@ -52,7 +52,9 @@ export with authors (an author-map file, if loaded, takes precedence).
 
 You can also drag a CSV or JSON file onto the Import card. Import errors should
 identify the file, row, or field that needs attention. Resolve those before
-configuring a build.
+configuring a build. After import, the pool summary lists tossup and bonus
+counts, the number of subcategories and distinct nonblank alternate
+subcategories for each category, and the subcategory names.
 
 ## Configure a packet build
 
@@ -80,6 +82,14 @@ CP-SAT solver. You can compare available similarity configurations under the
 same inputs and seed. The Python baseline is the default recommendation from
 the checked-in benchmark, but neither solver is a substitute for reviewing the
 actual layout.
+
+Under the soft scoring weights, three topic controls use each question's
+alternate subcategory: a penalty for sharing one, a smaller penalty for
+related questions in different categories (for example Hinduism and the
+Ramayana), and a checkbox to guess missing alternate subcategories (guesses
+count at half the penalty). Set the penalties to 0 to turn them off. Focus or
+hover the info icons beside scoring controls and result measures for details
+about what each value counts and how it affects the score.
 
 Soft penalties are scorer-dependent, so raw values from different scorers are
 not directly comparable. Compare the percentage improvement over random

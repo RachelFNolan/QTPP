@@ -126,7 +126,9 @@ input:focus, select:focus, textarea:focus { border-color: #7ca7eb; box-shadow: 0
 .choice-list { display: grid; gap: 8px; }
 .choice { display: flex; align-items: flex-start; gap: 9px; border: 1px solid #e5eaf1; border-radius: 7px; padding: 10px; }
 .choice:has(input:checked) { border-color: #a8c4f2; background: #f8fbff; }
-.choice input { margin-top: 2px; accent-color: var(--blue); }
+.choice-label { display: flex; flex: 1; align-items: flex-start; gap: 9px; min-width: 0; cursor: pointer; }
+.choice input { flex: 0 0 auto; margin-top: 2px; accent-color: var(--blue); }
+.choice-copy { min-width: 0; }
 .choice strong { display: block; color: #3b4d67; font-size: 11px; }
 .choice small { display: block; margin-top: 3px; color: #7d899b; font-size: 10px; line-height: 1.5; }
 .results-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; margin-top: 17px; }
@@ -270,7 +272,8 @@ input:focus, select:focus, textarea:focus { border-color: #7ca7eb; box-shadow: 0
 .cat-columns span:nth-child(4), .cat-columns span:nth-child(5) { width: 0; }
 
 .tip { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; margin-left: 6px; border-radius: 50%; color: #3e5d87; background: var(--blue-soft); font-size: 10px; font-weight: 700; cursor: help; vertical-align: middle; }
-.tip .tip-text { display: none; position: absolute; left: 22px; top: -6px; z-index: 6; width: 260px; padding: 9px 11px; border-radius: 7px; color: #fff; background: #1f2b47; font-size: 11px; font-weight: 400; line-height: 1.5; box-shadow: var(--shadow); }
+.tip .tip-text { display: none; position: absolute; left: 22px; top: -6px; z-index: 6; width: min(280px, calc(100vw - 32px)); padding: 9px 11px; border-radius: 7px; color: #fff; background: #1f2b47; font-size: 11px; font-weight: 400; line-height: 1.5; box-shadow: var(--shadow); text-align: left; }
+.tip.tip-left .tip-text { right: 22px; left: auto; }
 .tip:hover .tip-text, .tip:focus .tip-text { display: block; }
 .pattern-list { display: grid; gap: 10px; margin-bottom: 10px; }
 .pattern-card { border: 1px solid #dfe6f1; border-radius: 7px; padding: 11px; background: #fff; }

@@ -5,6 +5,8 @@ from pathlib import Path
 from qtpp import (
     FamilyPenaltyScorer,
     QuestionMetadata,
+    QuestionSet,
+    QuestionSetMetadata,
     SimilarityWeights,
     TfidfSimilarity,
     Topic,
@@ -128,6 +130,27 @@ class SimilarityTests(unittest.TestCase):
             q.metadata.id for q in pool.tossups if q.metadata.topic.alternate_subcategory != "Math"
         )
         self.assertAlmostEqual(plain.score(math[0], other), penalized.score(math[0], other))
+
+    def test_theme_penalty_links_different_categories_by_family_or_keyword(self) -> None:
+        def tossup(question_id, category, alternate, text):
+            return Tossup(
+                QuestionMetadata(question_id, Topic(category, "Sub", alternate)), text, "a"
+            )
+
+        pool = QuestionSet(
+            QuestionSetMetadata("t", "t", 2025, None),
+            (
+                tossup("rel", "Religion", "Hinduism", "Describe this faith."),
+                tossup("lit", "Literature", None, "The Ramayana tells of Rama."),
+                tossup("lit2", "Literature", None, "A play about a Danish prince."),
+                tossup("rel2", "Religion", None, "Describe this other faith."),
+            ),
+        )
+        plain = build_similarity(pool, SimilarityWeights(0, 0, 0.0001))
+        themed = build_similarity(pool, SimilarityWeights(0, 0, 0.0001), theme_penalty=0.2)
+        self.assertAlmostEqual(plain.score("rel", "lit") + 0.2, themed.score("rel", "lit"))
+        self.assertAlmostEqual(plain.score("lit2", "rel2"), themed.score("lit2", "rel2"))
+        self.assertAlmostEqual(plain.score("lit", "lit2"), themed.score("lit", "lit2"))
 
 
 if __name__ == "__main__":

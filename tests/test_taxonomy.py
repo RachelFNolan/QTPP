@@ -49,10 +49,35 @@ class TaxonomyTests(unittest.TestCase):
         taxonomy = load_taxonomy()
         names = {label.name for label in taxonomy.category("Literature").labels}
         self.assertEqual(names, {"Drama", "Poetry", "Long Fiction", "Short Fiction"})
+        self.assertEqual(
+            {label.name for label in taxonomy.category("Science").labels},
+            {"Math", "Astronomy", "Earth Science", "Engineering", "Computer Science"},
+        )
+        self.assertEqual(
+            taxonomy.category("Fine Arts").subcategories,
+            frozenset({"auditory fine arts", "other fine arts", "visual fine arts"}),
+        )
+        self.assertEqual(
+            taxonomy.category("Science").labels[0].subcategories,
+            frozenset({"other science"}),
+        )
         aliases = taxonomy.alias_map()
-        self.assertEqual(aliases["math"], "Mathematics")
-        self.assertEqual(aliases["astronomy"], "Astrophysics")
-        self.assertIn("other", taxonomy.catch_alls())
+        self.assertEqual(aliases["mathematics"], "Math")
+        self.assertEqual(aliases["astrophysics"], "Astronomy")
+        self.assertEqual(
+            taxonomy.catch_alls(),
+            {"misc arts", "misc literature", "other social science"},
+        )
+        self.assertEqual(taxonomy.category("Religion").labels, ())
+
+    def test_categories_without_observed_labels_are_valid_and_not_classified(self) -> None:
+        taxonomy = taxonomy_from_dict(
+            {"categories": {"Religion": {"subcategories": ["Religion"], "labels": {}}}}
+        )
+        result = suggest_with_taxonomy(
+            pool(tossup("r", "religion", "Religion", category="Religion")), taxonomy
+        )
+        self.assertEqual(result, [])
 
     def test_invalid_taxonomy_rejected(self) -> None:
         for bad in ({}, {"categories": {"X": {}}}, {"categories": {"X": {"labels": {"A": {"description": 3}}}}}):

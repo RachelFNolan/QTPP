@@ -38,6 +38,14 @@ The weights and nearby window can be changed. The defaults are defined by
 [`SoftWeights`](../qtpp/scoring.py), and the score is calculated by
 [`score_packet`](../qtpp/scoring.py).
 
+On the Compare page, the **Adjacent category** weight multiplies the count of
+adjacent same-category pairs, **Same-packet similarity** multiplies the
+pairwise-similarity sum across all questions in a packet, and **Nearby
+similarity** multiplies the distance-adjusted pair similarity within each
+ordered tossup or bonus sequence. **Nearby window** sets the maximum distance
+used for that last term. A weight of 0 disables its term. These preferences do
+not change hard-rule validation.
+
 ## Pairwise similarity
 
 The default pair score is a weighted blend:
@@ -56,6 +64,21 @@ where:
   otherwise. Subcategory agreement requires the same broad category and
   accounts for alternate subcategory labels.
 - \(C\) is 1 when the broad categories match, and 0 otherwise.
+
+Topic penalties from `alternate_subcategory` are added on top of this blend
+(each pair score is capped at 1): +0.5 when two questions share an alternate
+subcategory (a "family"; catch-alls such as Misc Literature are ignored), half
+that when the shared family is only a classifier guess for a question with a
+blank alternate subcategory, and +0.25 when questions in different categories
+share a theme (for example Hinduism and the Ramayana). The browser workspace
+exposes these under the soft scoring weights.
+
+The **Shared alternate subcategory penalty** and **Cross-category theme
+penalty** fields set the amounts added for those pair matches. **Guess missing
+alternate subcategories** enables curated family guesses for questions with a
+blank tag; a guessed match counts at half the family penalty. The text-only
+and topic-only scorers change the base similarity calculation, but configured
+family and theme penalties are still applied.
 
 The default searchable text uses sanitized question wording when available
 (otherwise the original wording) and primary answers. For bonuses it includes
@@ -80,3 +103,7 @@ that average.
 Similarity is a ranking signal, not a judgment that questions are duplicates
 or that players will necessarily find them confusing. Review the generated
 packets as well as their scores.
+
+The Compare page includes keyboard-focusable and hoverable info icons beside
+scoring controls and result measures for brief definitions of their inputs and
+interpretation.

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Iterable, Mapping, Protocol
 
 from .model import Bonus, QuestionSet, Tossup
-from .taxonomy import load_taxonomy
+from .taxonomy import ThemeSpec, load_taxonomy
 
 _TOKEN = re.compile(r"[a-z0-9]+(?:'[a-z]+)?")
 _STOPWORDS = frozenset(
@@ -211,6 +211,68 @@ class FamilyPenaltyScorer:
         return value
 
 
+def question_themes(
+    questions: Iterable[Tossup | Bonus],
+    themes: Iterable[ThemeSpec],
+    aliases: Mapping[str, str] | None = None,
+) -> dict[str, frozenset[str]]:
+    """Cross-category theme names per question, from its alternate subcategory or keywords."""
+    canonical = {_normalize_family(key): _normalize_family(value) for key, value in (aliases or {}).items()}
+    compiled = [
+        (
+            theme,
+            re.compile(
+                r"\b(?:" + "|".join(re.escape(word) for word in theme.keywords) + r")\b",
+                re.IGNORECASE,
+            )
+            if theme.keywords
+            else None,
+        )
+        for theme in themes
+    ]
+    result: dict[str, frozenset[str]] = {}
+    for question in questions:
+        alternate = _normalize_family(question.metadata.topic.alternate_subcategory or "")
+        alternate = canonical.get(alternate, alternate)
+        text = question_text(question)
+        found = {
+            theme.name
+            for theme, pattern in compiled
+            if (alternate and alternate in theme.families)
+            or (pattern is not None and pattern.search(text))
+        }
+        result[question.metadata.id] = frozenset(found)
+    return result
+
+
+class ThemePenaltyScorer:
+    """Raises the score of different-category pairs that share a cross-category theme."""
+
+    def __init__(
+        self,
+        scorer: PairScorer,
+        themes: Mapping[str, frozenset[str]],
+        categories: Mapping[str, str],
+        penalty: float,
+    ) -> None:
+        if penalty < 0:
+            raise ValueError("theme penalty must be non-negative")
+        self._scorer = scorer
+        self._themes = themes
+        self._categories = categories
+        self._penalty = penalty
+
+    def score(self, first_id: str, second_id: str) -> float:
+        value = self._scorer.score(first_id, second_id)
+        if (
+            self._penalty
+            and self._categories.get(first_id) != self._categories.get(second_id)
+            and self._themes.get(first_id, frozenset()) & self._themes.get(second_id, frozenset())
+        ):
+            return min(1.0, value + self._penalty)
+        return value
+
+
 def question_categories(questions: Iterable[Tossup | Bonus]) -> dict[str, str]:
     return {q.metadata.id: q.metadata.topic.category for q in questions}
 
@@ -278,6 +340,8 @@ def build_similarity(
     suggested_penalty: float | None = None,
     eras: Mapping[str, str] | None = None,
     regions: Mapping[str, str] | None = None,
+    theme_penalty: float = 0.0,
+    themes: Iterable[ThemeSpec] | None = None,
     era_penalty: float = 0.0,
     region_penalty: float = 0.0,
     era_categories: Iterable[str] = ("History", "Literature"),
@@ -301,6 +365,11 @@ def build_similarity(
     suggested_penalty (default: half of family_penalty), so uncertain tags
     nudge the solver without counting as much as confirmed ones. Confirmed
     families still take precedence and are never replaced by suggestions.
+
+    A positive theme_penalty penalizes pairs from different categories that
+    share a cross-category theme (for example Hinduism and the Ramayana),
+    matched by alternate subcategory or keyword. themes defaults to the
+    default taxonomy's themes.
 
     era_penalty / region_penalty similarly penalize same-category pairs that
     share an era or region tag (see time_place.detect_eras / detect_regions or
@@ -338,6 +407,18 @@ def build_similarity(
             }
         scorer = FamilyPenaltyScorer(
             scorer, families, family_penalty, suggested, suggested_penalty
+        )
+    if theme_penalty:
+        taxonomy = load_taxonomy()
+        if family_aliases is None:
+            family_aliases = taxonomy.alias_map()
+        scorer = ThemePenaltyScorer(
+            scorer,
+            question_themes(
+                questions, taxonomy.themes if themes is None else themes, family_aliases
+            ),
+            question_categories(questions),
+            theme_penalty,
         )
     for tags, penalty, scoped in (
         (eras, era_penalty, era_categories),

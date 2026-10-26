@@ -39,6 +39,7 @@ from .weight_sweep import DEFAULT_FACTORS, sweep_weights, tune_weights
 from .label_store import DEFAULT_LABELS, append_label, label_summary, load_labels, pair_key
 from .review_marks import active_marks, append_mark, load_marks
 from .scoring import PacketLayout, SoftWeights, score_layouts
+from .family_suggest import suggested_tags
 from .similarity import SimilarityWeights, build_similarity, question_text
 from .solving import InfeasibleError, PoolIndex, validate_layouts
 from .template_json import load_template, template_from_dict, template_to_dict
@@ -58,6 +59,32 @@ SIMILARITY_OPTIONS: dict[str, SimilarityWeights] = {
     "text-only-tfidf": SimilarityWeights(text=1.0, subcategory=0.0, category=0.0),
     "topics-only": SimilarityWeights(text=0.0, subcategory=0.7, category=0.3),
 }
+
+
+DEFAULT_TOPIC_PENALTIES = {
+    "family_penalty": 0.5,
+    "theme_penalty": 0.25,
+    "classify_missing": True,
+}
+
+
+def _topic_options(raw: Any) -> dict[str, Any]:
+    """Alternate-subcategory penalties for similarity; absent keys use defaults."""
+    if raw is None:
+        raw = {}
+    if not isinstance(raw, Mapping):
+        raise TypeError("topic_penalties must be an object.")
+    unknown = sorted(set(raw) - DEFAULT_TOPIC_PENALTIES.keys())
+    if unknown:
+        raise ValueError(f"Unknown topic penalty options: {', '.join(unknown)}")
+    options = {**DEFAULT_TOPIC_PENALTIES, **raw}
+    for key in ("family_penalty", "theme_penalty"):
+        value = options[key]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value <= 1:
+            raise ValueError(f"{key} must be a number between 0 and 1.")
+        options[key] = float(value)
+    options["classify_missing"] = bool(options["classify_missing"])
+    return options
 
 
 class WorkspaceError(ValueError):
@@ -235,11 +262,15 @@ class Workspace:
         with self._lock:
             pool = self._require_pool()
             categories: dict[str, set[str]] = {}
+            alternate_subcategories: dict[str, set[str]] = {}
             counts: dict[str, dict[str, int]] = {}
             for kind, questions in (("tossups", pool.tossups), ("bonuses", pool.bonuses)):
                 for question in questions:
                     topic = question.metadata.topic
                     categories.setdefault(topic.category, set()).add(topic.subcategory)
+                    alternate = (topic.alternate_subcategory or "").strip()
+                    if alternate:
+                        alternate_subcategories.setdefault(topic.category, set()).add(alternate)
                     entry = counts.setdefault(topic.category, {"tossups": 0, "bonuses": 0})
                     entry[kind] += 1
             return {
@@ -255,6 +286,10 @@ class Workspace:
                 "categories": {
                     category: sorted(subcategories)
                     for category, subcategories in sorted(categories.items())
+                },
+                "alternate_subcategory_counts": {
+                    category: len(alternate_subcategories.get(category, set()))
+                    for category in sorted(categories)
                 },
                 "category_counts": {category: counts[category] for category in sorted(counts)},
             }
@@ -393,8 +428,11 @@ class Workspace:
             )
         try:
             weights = _soft_weights(request.get("soft_weights"))
+            topic_options = _topic_options(request.get("topic_penalties"))
         except (TypeError, ValueError) as error:
             raise WorkspaceError(str(error)) from error
+        if topic_options.pop("classify_missing"):
+            topic_options["suggested_families"] = suggested_tags(pool)
         runs: list[_Run] = []
         use_judgments = bool(request.get("use_judgments", False))
         separate = use_judgments and bool(request.get("separate_flagged", False))
@@ -404,7 +442,9 @@ class Workspace:
             else Judgments()
         )
         base_scorers = {
-            similarity_id: build_similarity(pool, SIMILARITY_OPTIONS[similarity_id])
+            similarity_id: build_similarity(
+                pool, SIMILARITY_OPTIONS[similarity_id], **topic_options
+            )
             for similarity_id in dict.fromkeys(similarity_ids)
         }
         # Scores and baselines always use the soft floor so penalties stay comparable;

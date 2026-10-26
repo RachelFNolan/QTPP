@@ -60,6 +60,11 @@ function escapeHtml(value) {
   })[character]);
 }
 
+function helpTip(text, side = "") {
+  const safeText = escapeHtml(text);
+  return `<span class="tip ${side}" tabindex="0" role="note" aria-label="${safeText}">i<span class="tip-text">${safeText}</span></span>`;
+}
+
 function setNotice(message, kind = "") {
   const notice = byId("notice");
   window.clearTimeout(setNotice.timer);
@@ -121,12 +126,13 @@ function poolLoaded(pool, source = "") {
     </div>
     <div class="audit-table-wrap category-table-wrap">
       <table class="audit-table category-table">
-        <thead><tr><th>Category</th><th class="num">Tossups</th><th class="num">Bonuses</th><th class="num">Subcategories</th><th>Subcategory list</th></tr></thead>
+        <thead><tr><th>Category</th><th class="num">Tossups</th><th class="num">Bonuses</th><th class="num">Subcategories</th><th class="num">Alternate subcategories</th><th>Subcategory list</th></tr></thead>
         <tbody>${Object.entries(pool.categories).map(([category, subs]) => {
           const counts = (pool.category_counts || {})[category] || { tossups: 0, bonuses: 0 };
-          return `<tr><td><strong>${escapeHtml(category)}</strong></td><td class="num">${counts.tossups}</td><td class="num">${counts.bonuses}</td><td class="num">${subs.length}</td><td class="wrap">${subs.map(escapeHtml).join(", ")}</td></tr>`;
+          const alternateCount = (pool.alternate_subcategory_counts || {})[category] || 0;
+          return `<tr><td><strong>${escapeHtml(category)}</strong></td><td class="num">${counts.tossups}</td><td class="num">${counts.bonuses}</td><td class="num">${subs.length}</td><td class="num">${alternateCount}</td><td class="wrap">${subs.map(escapeHtml).join(", ")}</td></tr>`;
         }).join("")}</tbody>
-        <tfoot><tr><td>Total</td><td class="num">${pool.tossup_count}</td><td class="num">${pool.bonus_count}</td><td class="num"></td><td></td></tr></tfoot>
+        <tfoot><tr><td>Total</td><td class="num">${pool.tossup_count}</td><td class="num">${pool.bonus_count}</td><td class="num"></td><td class="num"></td><td></td></tr></tfoot>
       </table>
     </div>`;
   const categories = Object.keys(pool.categories);
@@ -517,11 +523,19 @@ function renderOptions() {
       <span><strong>${escapeHtml(item.label)}${item.available ? "" : " · unavailable"}</strong>
       <small>${item.available ? (item.id === "cpsat" ? "Exact hard constraints; optional OR-Tools dependency." : "Fast, repeatable local search; core dependency-free solver.") : `Install with ${escapeHtml(item.install || "the optional dependency set")}.`}</small></span>
     </label>`).join("");
+  const scorerDescriptions = {
+    "balanced-tfidf": "Combines question-text similarity with subcategory and category matches. Configured alternate-subcategory and cross-category theme penalties are also added.",
+    "text-only-tfidf": "The base score compares searchable question and answer text only. Configured alternate-subcategory and cross-category theme penalties are still added.",
+    "topics-only": "The base score compares category and subcategory labels only, not question wording. Configured alternate-subcategory and cross-category theme penalties are also added.",
+  };
   byId("similarity-options").innerHTML = state.options.similarities.map((item, index) => `
-    <label class="choice">
-      <input type="checkbox" name="similarity" value="${escapeHtml(item.id)}" ${index === 0 ? "checked" : ""}>
-      <span><strong>${escapeHtml(item.label)}</strong><small>Same hard rules; compare the soft-score result.</small></span>
-    </label>`).join("");
+    <div class="choice">
+      <label class="choice-label">
+        <input type="checkbox" name="similarity" value="${escapeHtml(item.id)}" ${index === 0 ? "checked" : ""}>
+        <span class="choice-copy"><strong>${escapeHtml(item.label)}</strong><small>Same hard rules; compare the soft-score result.</small></span>
+      </label>
+      ${scorerDescriptions[item.id] ? helpTip(scorerDescriptions[item.id], "tip-left") : ""}
+    </div>`).join("");
 }
 
 function updateRunState(payload) {
@@ -583,12 +597,12 @@ function renderComparison() {
   explainer.innerHTML = `
     <h3>How to read these results</h3>
     <ul class="small">
-      <li><strong>Penalty (lower is better)</strong> adds three parts: adjacent same-category tossups, similarity within a packet, and similarity between nearby questions (weighted as set above). Its units depend on the similarity scorer.</li>
-      <li><strong>% better than random (higher is better)</strong> compares the penalty with ${samples} random layouts that obey the same hard rules, scored by the same scorer. 0% is no better than random, 100% is a zero penalty. Because it is relative to each scorer's own baseline, it is comparable across scorers.</li>
-      <li><strong>Referee:</strong> the average % better than random across all selected scorers. No solver optimizes it directly, so it avoids favoring the scorer a build was tuned for. ${multiScorer ? "Choose a single scorer below to rank by it instead." : "With one scorer selected it equals that scorer's % better than random."}</li>
+      <li><strong>Penalty (lower is better)</strong>${helpTip("The total soft penalty: adjacent same-category pairs, pair similarity within a packet, and pair similarity between nearby questions, each multiplied by its weight. Raw values depend on the scorer.")} adds three parts: adjacent same-category tossups, similarity within a packet, and similarity between nearby questions (weighted as set above). Its units depend on the similarity scorer.</li>
+      <li><strong>% better than random (higher is better)</strong>${helpTip("Compares this penalty with random layouts that obey the same hard rules and use the same scorer. 0% matches the random baseline; 100% is a zero penalty. This normalized value can be compared across scorers.")} compares the penalty with ${samples} random layouts that obey the same hard rules, scored by the same scorer. 0% is no better than random, 100% is a zero penalty. Because it is relative to each scorer's own baseline, it is comparable across scorers.</li>
+      <li><strong>Referee${helpTip("Average of the percentage better than random across selected scorers. No solver optimizes this average directly.")}:</strong> the average % better than random across all selected scorers. No solver optimizes it directly, so it avoids favoring the scorer a build was tuned for. ${multiScorer ? "Choose a single scorer below to rank by it instead." : "With one scorer selected it equals that scorer's % better than random."}</li>
       <li>Hard rules are enforced regardless of score. Equal results are all marked best. Random baselines use the seed and ${samples} samples; more samples give a steadier baseline.</li>
     </ul>
-    <div class="field-row yardstick-row"><label for="yardstick">Rank builds by</label>
+    <div class="field-row yardstick-row"><label for="yardstick">Rank builds by ${helpTip("Choose the measure used to order build results. Referee averages normalized improvements across selected scorers; a single scorer uses that scorer's normalized improvement; own penalty uses raw values and is not comparable across scorers.")}</label>
       <select id="yardstick">
         <option value="referee" ${yardstick === "referee" ? "selected" : ""}>Referee: average % better than random</option>
         ${multiScorer ? yardsticks.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === yardstick ? "selected" : ""}>${escapeHtml(item.name)} only</option>`).join("") : ""}
@@ -612,14 +626,14 @@ function renderComparison() {
       <div class="result-head"><strong>${escapeHtml(solverLabel(run))} · ${escapeHtml(run.similarity)}</strong>
         <span class="badges">${isBest ? '<span class="pill best-pill">★ Best score</span>' : ""}${selected ? '<span class="pill good">Reviewing</span>' : ""}</span></div>
       <div class="score-pair">
-        ${yardstick === "own" ? "" : `<div class="score-block"><div class="score">${percentBetter(value)}</div><small>better than random · ${heading}</small>
+        ${yardstick === "own" ? "" : `<div class="score-block"><div class="score">${percentBetter(value)}</div><small>better than random · ${heading}${helpTip("Normalized improvement over a random baseline using the same hard rules and scorer. Higher is better; the referee averages this value over selected scorers.")}</small>
           ${runs.length > 1 ? `<div class="rank">${isBest ? "Best of " + runs.length : `${gap.toFixed(1)} points behind best · rank ${rank} of ${runs.length}`}</div>` : ""}</div>`}
-        <div class="score-block"><div class="score">${Number(score.total).toFixed(2)}</div><small>${escapeHtml(penaltyLabel)} · lower is better</small></div>
+        <div class="score-block"><div class="score">${Number(score.total).toFixed(2)}</div><small>${escapeHtml(penaltyLabel)} · lower is better${helpTip("Sum of the weighted adjacency, same-packet similarity, and nearby similarity terms. It is a soft preference, not a hard-rule check.")}</small></div>
       </div>
       <div class="score-detail">
-        <span>Adjacency<br>${Number(score.adjacent_category).toFixed(2)}</span>
-        <span>Same packet<br>${Number(score.same_packet).toFixed(2)}</span>
-        <span>Nearby<br>${Number(score.nearby).toFixed(2)}</span>
+        <span>Adjacency${helpTip("Weighted count of adjacent tossup or bonus pairs in the same broad category within a packet.")}<br>${Number(score.adjacent_category).toFixed(2)}</span>
+        <span>Same packet${helpTip("Weighted sum of pairwise similarity for all questions in each packet, including tossup-bonus pairs.", "tip-left")}<br>${Number(score.same_packet).toFixed(2)}</span>
+        <span>Nearby${helpTip("Weighted similarity between questions within the nearby window, divided by their distance. Tossups and bonuses are evaluated separately.", "tip-left")}<br>${Number(score.nearby).toFixed(2)}</span>
       </div>
       <p class="result-meta">${Number(run.seconds).toFixed(2)}s · seed ${run.seed} · ${run.leftover_count} leftover</p>
       <button class="button secondary small" data-select-run="${run.index}" ${selected ? "disabled" : ""}>${selected ? "Selected for review" : "Review this result"}</button>
@@ -1358,6 +1372,11 @@ byId("run-build").addEventListener("click", async (event) => {
       solvers,
       similarities,
       baseline_samples: Number(byId("baseline-samples").value),
+      topic_penalties: {
+        family_penalty: Number(byId("penalty-family").value),
+        theme_penalty: Number(byId("penalty-theme").value),
+        classify_missing: byId("classify-missing").checked,
+      },
       soft_weights: {
         adjacent_category: Number(byId("weight-adjacent").value),
         same_packet: Number(byId("weight-packet").value),
@@ -1478,9 +1497,9 @@ function renderSweep(result) {
     ? `<div class="review-banner good"><strong>No visible effect:</strong> ${result.insensitive.map((term) => termNames[term]).join(", ")} — changing ${result.insensitive.length === 1 ? "this weight" : "these weights"} did not change the packets, so tuning ${result.insensitive.length === 1 ? "it" : "them"} is not worth the effort for this pool.</div>`
     : "";
   byId("sweep-results").innerHTML = `${quiet}
-    <h4>Size of each term at your current weights (${escapeHtml(result.similarity)})</h4>
+    <h4>Size of each term at your current weights (${escapeHtml(result.similarity)}) ${helpTip("Weight is your coefficient; raw value is the term at weight 1; weighted is raw value multiplied by your coefficient. Share is that weighted term's portion of the total penalty. The three terms are adjacent category, same-packet similarity, and nearby similarity.")}</h4>
     <div class="audit-table-wrap"><table class="audit-table"><thead><tr><th>Term</th><th>Weight</th><th>Raw value</th><th>Weighted</th><th>Share of penalty</th></tr></thead><tbody>${scale}</tbody></table></div>
-    <h4>Each weight varied alone</h4>
+    <h4>Each weight varied alone ${helpTip("The solver changes one coefficient by the listed multiplier while keeping the other settings and seed fixed. The penalty column re-scores the alternative layout using your actual weights.")}</h4>
     <div class="audit-table-wrap"><table class="audit-table"><thead><tr><th>Weight varied</th><th>Multiplier</th><th>New value</th><th>Raw adjacent</th><th>Raw same packet</th><th>Raw nearby</th><th>Penalty at your weights</th><th>Pairings changed</th><th>Slots changed</th></tr></thead><tbody>${rows}</tbody></table></div>
     <p class="small muted-text">Raw values count each term at weight 1 so rows are comparable. “Pairings changed” is the share of same-packet pairs from your current build that are no longer together; “Slots changed” is the share of positions holding a different question. Penalty at your weights shows what each alternative costs under your actual preferences.</p>`;
 }
@@ -1510,9 +1529,9 @@ function renderTune(result) {
   const scorers = result.scorers.map((item) => `<li>${escapeHtml(item.name)} — started from the ${escapeHtml(item.starting_solver)} build (${percent(item.improvement)} better than random)</li>`).join("");
   const rows = result.top.map((item, index) => `<tr><td>${index + 1}</td><td>${Number(item.weights.adjacent_category).toFixed(2)}</td><td>${Number(item.weights.same_packet).toFixed(2)}</td><td>${Number(item.weights.nearby).toFixed(2)}</td><td>${percent(item.quality)}</td><td>${percent(item.spread)}</td></tr>`).join("");
   byId("tune-results").innerHTML = `${partial}${verdict}
-    <p class="small muted-text">${plural(result.evaluated_candidates, "candidate")} tried, ${plural(result.builds, "build")} in ${Number(result.seconds).toFixed(1)}s. Quality is the average improvement over random layouts with every term at weight 1; it never rewards lowering a weight.</p>
+    <p class="small muted-text">${plural(result.evaluated_candidates, "candidate")} tried, ${plural(result.builds, "build")} in ${Number(result.seconds).toFixed(1)}s. Quality${helpTip("Average improvement over random layouts using every soft-score term at weight 1, so the search cannot improve its result merely by lowering a weight.")} is the average improvement over random layouts with every term at weight 1; it never rewards lowering a weight.</p>
     <h4>Starting builds</h4><ul class="small">${scorers}</ul>
-    <h4>Top candidates</h4>
+    <h4>Top candidates ${helpTip("Quality is average held-out improvement over random, scored with all terms at weight 1. Spread across seeds shows variation in quality; lower spread means more consistent results.")}</h4>
     <div class="audit-table-wrap"><table class="audit-table"><thead><tr><th>#</th><th>Adjacent</th><th>Same packet</th><th>Nearby</th><th>Quality</th><th>Spread across seeds</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
@@ -1774,7 +1793,7 @@ function renderSummary(issues) {
     const run = state.payload.runs.find((item) => item.index === state.payload.selected_run);
     const report = state.payload.draft.report;
     buildRows += summaryRow("Reviewing", run ? escapeHtml(`${optionLabel("solvers", run.solver)} · seed ${run.seed}`) : dash)
-      + summaryRow("Penalty", Number(report.score.total).toFixed(2))
+      + summaryRow("Penalty", `${Number(report.score.total).toFixed(2)}${helpTip("Total soft penalty for the selected layout. Lower is preferred; this score does not replace hard-rule validation.")}`)
       + summaryRow("Hard rules", report.hard_errors.length ? `<span class="bad">${report.hard_errors.length} violation${report.hard_errors.length === 1 ? "" : "s"}</span>` : '<span class="ok">pass</span>')
       + summaryRow("Leftovers", report.leftover_ids.length)
       + (state.dirty ? summaryRow("Placements", '<span class="warn">unsaved edits</span>') : "");
@@ -1855,6 +1874,12 @@ function updateChrome() {
 }
 
 document.addEventListener("click", (event) => {
+  const tip = event.target.closest(".tip");
+  if (tip) {
+    // Do not let an info click activate a surrounding form label.
+    event.preventDefault();
+    tip.focus({ preventScroll: true });
+  }
   const link = event.target.closest(".summary-link, .empty-state [data-go]");
   if (link) showView(link.dataset.go);
 });

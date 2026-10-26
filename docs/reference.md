@@ -184,7 +184,11 @@ recommended default based on the checked-in benchmark. Run
 
 ## Topic-family and time/place tools
 
-Topic-family penalties are opt-in. `build_similarity(pool,
+The browser workspace applies these penalties by default (shared alternate
+subcategory 0.5, cross-category theme 0.25, guessed families half the family
+penalty); the `topic_penalties` object in the `/api/generate` request
+(`family_penalty`, `theme_penalty`, `classify_missing`) overrides them. In the
+Python API they are opt-in. `build_similarity(pool,
 family_penalty=0.5)` adds a pair penalty when two questions share a family.
 By default, a question's `alternate_subcategory` is its family, compared
 case-insensitively; catch-alls such as Misc Literature, Misc Arts, and Other
@@ -192,7 +196,16 @@ Social Science are skipped. Use `excluded_families=` to change those
 exclusions. For Other History, which has no alternate values, curated families
 can be provided as `curated_families={question_id: ["Military"]}` or loaded
 with `load_curated_families(...)`. An empty curated list removes a question's
-family. The family penalty defaults to zero.
+family. The family penalty defaults to zero in `build_similarity`.
+
+`theme_penalty=` adds a smaller penalty to pairs from *different* categories
+that share a theme, such as a Hinduism religion question and a Ramayana
+literature question. Themes come from the optional `themes` section of the
+taxonomy ([`default_taxonomy.json`](../qtpp/default_taxonomy.json)); a question
+joins a theme through its alternate subcategory (`families`) or a whole-word
+match on its text (`keywords`). When `classify_missing` is on, the workspace
+guesses families for questions with no alternate subcategory using
+`family_suggest.suggested_tags` (TF-IDF by default, no extra dependencies).
 
 `python3 -m utilities.suggest_families suggest --pool "Question Pool.csv"`
 generates family suggestions. Without `--labels`, it uses
@@ -202,6 +215,13 @@ include `fastembed` (default), `sentence-transformers`, and dependency-free
 `tfidf`. Review suggestions before approving them; they never affect a build
 unless explicitly loaded. The taxonomy schema and behavior are documented in
 [`qtpp/taxonomy.py`](../qtpp/taxonomy.py).
+
+The default taxonomy's category/subcategory scopes and alternate-subcategory
+labels are based on the observed values in the 2026 ACF Nationals pool.
+Categories with no observed alternate labels have an empty `labels` object, so
+the classifier does not invent labels for those categories. Catch-all labels
+observed in that pool (Misc Arts, Misc Literature, and Other Social Science)
+are listed as catch-alls rather than classifier targets.
 
 The same utility has a `time-place` mode for suggested eras and regions. Save
 the results for review, then use `load_time_place_tags(...)` and pass the

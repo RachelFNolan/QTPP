@@ -14,6 +14,12 @@ JSON schema (also intended for a future GUI to edit):
                 }
             }
         }
+    },
+    "themes": {                                      # optional cross-category links
+        "Indian religion and literature": {
+            "families": ["Hinduism", "Indian Literature"],   # alternate subcategories
+            "keywords": ["Ramayana", "Mahabharata"]          # whole words in question text
+        }
     }}
 """
 
@@ -62,8 +68,16 @@ class CategoryTaxonomy:
 
 
 @dataclass(frozen=True, slots=True)
+class ThemeSpec:
+    name: str
+    families: frozenset[str] = frozenset()
+    keywords: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class Taxonomy:
     categories: Mapping[str, CategoryTaxonomy] = field(default_factory=dict)
+    themes: tuple[ThemeSpec, ...] = ()
 
     def category(self, name: str) -> CategoryTaxonomy | None:
         for key, value in self.categories.items():
@@ -113,8 +127,8 @@ def taxonomy_from_dict(data: object, source: str = "taxonomy") -> Taxonomy:
     for category_name, body in raw.items():
         where = f"{source}: category {category_name!r}"
         labels_raw = body.get("labels") if isinstance(body, dict) else None
-        if not isinstance(labels_raw, dict) or not labels_raw:
-            raise ValueError(f"{where}: needs a non-empty 'labels' object")
+        if not isinstance(labels_raw, dict):
+            raise ValueError(f"{where}: needs a 'labels' object")
         labels = []
         for name, spec in labels_raw.items():
             if isinstance(spec, (str, list)):
@@ -143,7 +157,20 @@ def taxonomy_from_dict(data: object, source: str = "taxonomy") -> Taxonomy:
             catch_all=tuple(catch_all),
             subcategories=_optional_set(body.get("subcategories"), f"{where}: subcategories"),
         )
-    return Taxonomy(categories)
+    themes = []
+    for name, body in (data.get("themes") or {}).items():
+        families = body.get("families", []) if isinstance(body, dict) else None
+        keywords = body.get("keywords", []) if isinstance(body, dict) else None
+        if (
+            not isinstance(families, list)
+            or not isinstance(keywords, list)
+            or any(not isinstance(item, str) for item in (*families, *keywords))
+        ):
+            raise ValueError(f"{source}: theme {name!r} needs 'families' and 'keywords' string lists")
+        themes.append(
+            ThemeSpec(name, frozenset(normalize(f) for f in families), tuple(keywords))
+        )
+    return Taxonomy(categories, tuple(themes))
 
 
 def load_taxonomy(path: str | Path = DEFAULT_TAXONOMY) -> Taxonomy:
