@@ -68,6 +68,14 @@ question IDs and hashes of normalized text, not question text, and is tracked
 in the repository. The latest label for a pair takes precedence. Review the
 file's changes before sharing or committing them.
 
+## Where are Review marks and notes saved?
+
+Marks made with the ⚑ button in Review are appended to
+`calibration/review_marks.jsonl`. It stores question IDs, optional notes, status
+and timestamps, not question text, and is tracked in the repository. The latest
+record for a mark takes precedence. Notes may contain anything you type, so
+check them before sharing the file.
+
 ## Is the guided sample required?
 
 No. It is an onboarding option, not a prerequisite. Import your own CSV or

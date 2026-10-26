@@ -228,7 +228,19 @@ app's Audit view can also append judgments to `calibration/labels.jsonl`;
 `python3 -m calibration.label_cache summary` reports its counts, while
 `python3 -m calibration.evaluate_similarity --labels` evaluates a scorer
 against those labels. The label cache contains IDs and normalized-text hashes,
-not question text. Check the
+not question text.
+
+Reviewer marks from the Review page are stored separately in
+`calibration/review_marks.jsonl` (`qtpp/review_marks.py`), one JSON object per
+line: `mark_id`, `question_id`, optional `other_id`, `note` (up to 500
+characters), `status` (`open`, `resolved`, or `removed`), `reviewer`, `pool`,
+`created_at`, `updated_at`. The latest line per `mark_id` wins. The local server
+exposes `POST /api/marks` (list marks for the current pool) and
+`POST /api/mark` (create, or update with `mark_id`; optional `also_label` writes
+a pair label with `source` `review-mark`). Audit results include the pool's
+marks.
+
+Check the
 [benchmark report](../STEP-2-BENCHMARK.md) for fixture sizes and the limits of
 the reported metrics.
 

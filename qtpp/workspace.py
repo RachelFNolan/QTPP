@@ -37,6 +37,7 @@ from .judged_scorer import (
 )
 from .weight_sweep import DEFAULT_FACTORS, sweep_weights, tune_weights
 from .label_store import DEFAULT_LABELS, append_label, label_summary, load_labels, pair_key
+from .review_marks import active_marks, append_mark, load_marks
 from .scoring import PacketLayout, SoftWeights, score_layouts
 from .similarity import SimilarityWeights, build_similarity, question_text
 from .solving import InfeasibleError, PoolIndex, validate_layouts
@@ -83,8 +84,12 @@ class Workspace:
         templates_dir: str | Path = DEFAULT_TEMPLATES,
         demo_csv: str | Path = DEFAULT_DEMO,
         labels_path: str | Path = DEFAULT_LABELS,
+        marks_path: str | Path | None = None,
     ) -> None:
         self._labels_path = Path(labels_path)
+        self._marks_path = (
+            Path(marks_path) if marks_path else self._labels_path.with_name("review_marks.jsonl")
+        )
         self.templates_dir = Path(templates_dir)
         self.demo_csv = Path(demo_csv)
         self._lock = threading.RLock()
@@ -663,7 +668,73 @@ class Workspace:
                 ),
                 "composition": findings,
                 "likely_conflicts": conflicts,
+                "marks": self._marks_payload(pool),
             }
+
+    def _marks_payload(self, pool: QuestionSet) -> list[dict[str, Any]]:
+        known = _questions_by_id(pool)
+        return [
+            mark
+            for mark in active_marks(self._marks_path, pool.metadata.name)
+            if mark["question_id"] in known and (not mark.get("other_id") or mark["other_id"] in known)
+        ]
+
+    def list_marks(self) -> dict[str, Any]:
+        with self._lock:
+            return {"marks": self._marks_payload(self._require_pool())}
+
+    def save_mark(self, request: Mapping[str, Any]) -> dict[str, Any]:
+        """Create or update a reviewer mark; `status` may be open, resolved or removed."""
+        with self._lock:
+            pool = self._require_pool()
+            questions = _questions_by_id(pool)
+            mark_id = request.get("mark_id")
+            existing = None
+            if mark_id is not None:
+                existing = load_marks(self._marks_path).get(mark_id)
+                if existing is None or existing.get("pool", "") != pool.metadata.name:
+                    raise WorkspaceError("That mark was not found for this pool.")
+            base = existing or {}
+            question_id = base.get("question_id") or request.get("question_id")
+            other_id = request["other_id"] if "other_id" in request else base.get("other_id")
+            other_id = other_id or None
+            if question_id not in questions:
+                raise WorkspaceError("Choose a question from the imported pool.")
+            if other_id is not None and (other_id not in questions or other_id == question_id):
+                raise WorkspaceError("The linked question must be a different question from the pool.")
+            reviewer = request.get("reviewer", base.get("reviewer", ""))
+            if not isinstance(reviewer, str) or len(reviewer) > 80:
+                raise WorkspaceError("reviewer must be text of 80 characters or fewer.")
+            note = request.get("note", base.get("note", ""))
+            status = request.get("status", base.get("status", "open"))
+            try:
+                record = append_mark(
+                    self._marks_path,
+                    question_id=question_id,
+                    other_id=other_id,
+                    note=note,
+                    pool=pool.metadata.name,
+                    mark_id=mark_id,
+                    status=status,
+                    reviewer=reviewer,
+                    created_at=base.get("created_at"),
+                )
+            except ValueError as error:
+                raise WorkspaceError(str(error)) from error
+            label = request.get("also_label")
+            if label is not None:
+                if other_id is None:
+                    raise WorkspaceError("Link a second question before recording a similarity label.")
+                self.label_pair(
+                    {
+                        "first_id": question_id,
+                        "second_id": other_id,
+                        "label": label,
+                        "reviewer": reviewer,
+                        "source": "review-mark",
+                    }
+                )
+            return {"mark": record, "marks": self._marks_payload(pool)}
 
     def export(self, request: Mapping[str, Any] | None = None) -> dict[str, Any]:
         with self._lock:
@@ -793,6 +864,7 @@ class Workspace:
                     second_id=second_id,
                     label=request.get("label"),
                     reviewer=reviewer,
+                    source="review-mark" if request.get("source") == "review-mark" else "web",
                     pool=pool.metadata.name,
                     question_types=kinds,
                 )

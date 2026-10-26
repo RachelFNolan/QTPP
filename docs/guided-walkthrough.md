@@ -27,7 +27,7 @@ your own pool. You do not need to prepare a CSV or template first.
    Compare scores only with their scorer's matching random baseline.
 4. **Review and arrange packets.** Inspect the questions and answers in a
    candidate layout. Move or reorder questions and recalculate validation
-   after edits.
+   after edits. Optionally use ⚑ to mark questions you think may conflict.
 5. **Investigate packet composition.** In Audit, ask a composition question
    and inspect the evidence and likely conflicts. Similarity flags are review
    prompts, not proof that questions are duplicates.

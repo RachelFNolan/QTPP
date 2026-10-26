@@ -17,6 +17,9 @@ const state = {
   feasibility: null,
   initialized: false,
   authors: {},
+  marks: [],
+  markEditor: null,
+  locations: {},
 };
 
 const titles = {
@@ -93,7 +96,10 @@ function showView(view, { focus = true } = {}) {
     if (active) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current");
   });
   byId("page-title").textContent = titles[view] || "QTPP Packet Workshop";
-  if (view === "review") renderReview();
+  if (view === "review") {
+    renderReview();
+    refreshMarks();
+  }
   updateChrome();
   if (focus && state.initialized) byId("page-title").focus({ preventScroll: true });
   window.scrollTo({ top: 0 });
@@ -646,7 +652,8 @@ function renderReview() {
     host.innerHTML = "";
     return;
   }
-  summary.innerHTML = reviewMessage();
+  state.locations = questionLocations();
+  summary.innerHTML = reviewMessage() + renderMarksSummary();
   if (state.dirty) {
     summary.insertAdjacentHTML("afterbegin", `<div class="review-banner warn"><strong>Unsaved placement edits.</strong> Recalculate and validate before audit or export.</div>`);
   }
@@ -658,7 +665,10 @@ function renderReview() {
   host.innerHTML = `
     <label class="packet-picker">Packet
       <select id="review-packet" data-review-packet aria-label="Packet to review">
-        ${packets.map((item, index) => `<option value="${index}"${index === packetIndex ? " selected" : ""}>${escapeHtml(item.name)}</option>`).join("")}
+        ${packets.map((item, index) => {
+          const flagged = openMarkCount(index);
+          return `<option value="${index}"${index === packetIndex ? " selected" : ""}>${escapeHtml(item.name)}${flagged ? ` (⚑ ${flagged})` : ""}</option>`;
+        }).join("")}
       </select>
     </label>
     <article class="packet-card">
@@ -694,13 +704,19 @@ function renderQuestionCell(id, index, type, packetIndex, questions) {
   const body = question.type === "tossup"
       ? `<p class="question-text">${formatText(question.question)}</p><p class="answer-text"><b>ANSWER:</b> ${formatText(question.answer)}</p>`
       : `<p class="question-text">${formatText(question.leadin)}</p>${question.parts.map((part, partIndex) => `<p class="question-text"><b>[${partIndex + 1}]</b> ${formatText(part.question)}</p><p class="answer-text"><b>ANSWER:</b> ${formatText(part.answer)}</p>`).join("")}`;
-  return `<div class="question-cell"><div class="question-row">
+  const touching = marksTouching(id);
+  const badge = touching.length
+    ? `<span class="mark-badge" title="${escapeHtml(touching.map((mark) => mark.note).filter(Boolean).join(" · ") || "Marked as a possible conflict")}">⚑ Possible conflict</span>`
+    : "";
+  const editor = state.markEditor && state.markEditor.questionId === id ? renderMarkEditor(id, questions) : "";
+  return `<div class="question-cell${touching.length ? " marked" : ""}" data-qid="${escapeHtml(id)}"><div class="question-row">
       <span class="question-number">${String(index + 1).padStart(2, "0")}</span>
       <div class="question-main">
-        <span class="topic-tag">${escapeHtml(question.category)} / ${escapeHtml(question.subcategory)}</span>
+        <span class="topic-tag">${escapeHtml(question.category)} / ${escapeHtml(question.subcategory)}</span>${badge}
         ${body}
       </div>
       <div class="question-actions">
+        <button class="icon-button${touching.length ? " active" : ""}" title="Mark or annotate a possible conflict" aria-label="Mark possible conflict" aria-pressed="${touching.length > 0}" data-mark-open="${escapeHtml(id)}">⚑</button>
         <button class="icon-button" title="Move up" aria-label="Move up" data-order="up" data-packet="${packetIndex}" data-type="${type}" data-id="${escapeHtml(id)}">↑</button>
         <button class="icon-button" title="Move down" aria-label="Move down" data-order="down" data-packet="${packetIndex}" data-type="${type}" data-id="${escapeHtml(id)}">↓</button>
         <select class="move-select" aria-label="Move question to packet" data-move="${escapeHtml(id)}" data-type="${type}" data-from="${packetIndex}">
@@ -708,8 +724,151 @@ function renderQuestionCell(id, index, type, packetIndex, questions) {
           ${state.payload.draft.packets.map((packet, destination) => destination === packetIndex ? "" : `<option value="${destination}">${escapeHtml(packet.name)}</option>`).join("")}
         </select>
       </div>
-    </div></div>`;
+    </div>${editor}</div>`;
 }
+
+function questionLocations() {
+  const found = {};
+  (state.layouts || []).forEach((layout, packet) => {
+    layout.tossups.forEach((id, index) => { found[id] = { packet, type: "tossups", index }; });
+    layout.bonuses.forEach((id, index) => { found[id] = { packet, type: "bonuses", index }; });
+  });
+  return found;
+}
+
+function locationLabel(id) {
+  const place = state.locations[id];
+  if (!place) return `${id} (not in a packet)`;
+  const names = state.payload ? state.payload.draft.packets : [];
+  const packet = names[place.packet] ? names[place.packet].name : `Packet ${place.packet + 1}`;
+  return `${packet} · ${place.type === "tossups" ? "TU" : "B"} ${place.index + 1}`;
+}
+
+function plainText(value) {
+  return String(value || "").replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
+}
+
+function fullAnswer(question) {
+  if (!question) return "";
+  const answers = question.type === "tossup" ? [question.answer] : (question.parts || []).map((part) => part.answer);
+  return answers.map(plainText).filter(Boolean).join(" / ");
+}
+
+function answerPreview(question, limit = 80) {
+  const text = fullAnswer(question);
+  return text.length > limit ? `${text.slice(0, limit - 1).trimEnd()}…` : text;
+}
+
+function marksTouching(id) {
+  return state.marks.filter((mark) => mark.status === "open" && (mark.question_id === id || mark.other_id === id));
+}
+
+function openMarkCount(packetIndex) {
+  const ids = new Set();
+  state.marks.filter((mark) => mark.status === "open").forEach((mark) => {
+    [mark.question_id, mark.other_id].forEach((id) => {
+      if (id && state.locations[id] && state.locations[id].packet === packetIndex) ids.add(id);
+    });
+  });
+  return ids.size;
+}
+
+async function refreshMarks() {
+  try {
+    state.marks = (await api("/api/marks")).marks;
+  } catch (error) {
+    state.marks = [];
+    return;
+  }
+  if (state.view === "review") renderReview();
+}
+
+function renderMarkEditor(id, questions) {
+  const existing = state.marks.find((mark) => mark.question_id === id && mark.status !== "removed");
+  const partner = existing ? existing.other_id : "";
+  const options = Object.keys(state.locations).filter((other) => other !== id).map((other) =>
+    `<option value="${escapeHtml(other)}"${other === partner ? " selected" : ""} title="${escapeHtml(fullAnswer(questions[other]))}">${escapeHtml([
+      locationLabel(other),
+      questions[other] ? `${questions[other].category} / ${questions[other].subcategory}` : "",
+      answerPreview(questions[other]),
+    ].filter(Boolean).join(" — "))}</option>`).join("");
+  return `<div class="mark-editor" data-mark-editor="${escapeHtml(id)}" data-mark-id="${escapeHtml(existing ? existing.mark_id : "")}">
+    <label>Possible conflict with <select class="mark-other"><option value="">(no specific question)</option>${options}</select></label>
+    <label>Note <textarea class="mark-note" maxlength="500" rows="2" placeholder="Optional: what overlaps or why this worries you">${escapeHtml(existing ? existing.note : "")}</textarea></label>
+    <label class="inline-check"><input type="checkbox" class="mark-also-label"> Also record the pair as “Too similar” so re-runs keep them apart</label>
+    <div class="mark-buttons">
+      <button type="button" class="button small primary" data-mark-save>Save mark</button>
+      ${existing ? `<button type="button" class="button small secondary" data-mark-status="${existing.status === "open" ? "resolved" : "open"}" data-mark-target="${escapeHtml(existing.mark_id)}">${existing.status === "open" ? "Mark resolved" : "Reopen"}</button>
+      <button type="button" class="button small secondary" data-mark-status="removed" data-mark-target="${escapeHtml(existing.mark_id)}">Remove</button>` : ""}
+      <button type="button" class="button small secondary" data-mark-cancel>Close</button>
+      <span class="small muted-text" aria-live="polite" data-mark-status-text></span>
+    </div>
+  </div>`;
+}
+
+function renderMarksSummary() {
+  const open = state.marks.filter((mark) => mark.status === "open");
+  const resolved = state.marks.filter((mark) => mark.status === "resolved");
+  if (!open.length && !resolved.length) return "";
+  const row = (mark) => `<li class="${mark.status}">
+    <button type="button" class="link-button" data-mark-jump="${escapeHtml(mark.question_id)}">${escapeHtml(locationLabel(mark.question_id))}</button>
+    ${mark.other_id ? ` ↔ <button type="button" class="link-button" data-mark-jump="${escapeHtml(mark.other_id)}">${escapeHtml(locationLabel(mark.other_id))}</button>` : ""}
+    ${mark.note ? `<span class="mark-note-text">— ${escapeHtml(mark.note)}</span>` : ""}
+    ${mark.status === "resolved" ? '<em class="small muted-text">resolved</em>' : ""}
+  </li>`;
+  return `<div class="review-banner warn mark-summary"><strong>Marked possible conflicts: ${open.length} open${resolved.length ? `, ${resolved.length} resolved` : ""}</strong>
+    <ul>${[...open, ...resolved].map(row).join("")}</ul></div>`;
+}
+
+async function saveMark(editor, status) {
+  const note = editor.querySelector(".mark-note");
+  const other = editor.querySelector(".mark-other");
+  const alsoLabel = editor.querySelector(".mark-also-label").checked;
+  const body = { note: note.value, other_id: other.value || null };
+  if (editor.dataset.markId) body.mark_id = editor.dataset.markId; else body.question_id = editor.dataset.markEditor;
+  if (status) body.status = status;
+  if (alsoLabel && other.value) body.also_label = "similar";
+  try {
+    state.marks = (await api("/api/mark", body)).marks;
+    state.markEditor = null;
+    renderReview();
+  } catch (error) { setNotice(error.message, "error"); }
+}
+
+function handleMarkClick(event) {
+  const open = event.target.closest("[data-mark-open]");
+  if (open) {
+    state.markEditor = state.markEditor && state.markEditor.questionId === open.dataset.markOpen ? null : { questionId: open.dataset.markOpen };
+    renderReview();
+    return;
+  }
+  const jump = event.target.closest("[data-mark-jump]");
+  if (jump) {
+    const place = state.locations[jump.dataset.markJump];
+    if (!place) return;
+    state.reviewPacket = place.packet;
+    renderReview();
+    const cell = [...document.querySelectorAll("[data-qid]")].find((item) => item.dataset.qid === jump.dataset.markJump);
+    if (cell) {
+      cell.scrollIntoView({ block: "center" });
+      cell.classList.add("mark-flash");
+    }
+    return;
+  }
+  const editor = event.target.closest("[data-mark-editor]");
+  if (!editor) return;
+  if (event.target.closest("[data-mark-cancel]")) {
+    state.markEditor = null;
+    renderReview();
+  } else if (event.target.closest("[data-mark-save]")) {
+    saveMark(editor, null);
+  } else {
+    const change = event.target.closest("[data-mark-status]");
+    if (change) saveMark(editor, change.dataset.markStatus);
+  }
+}
+byId("packet-list").addEventListener("click", handleMarkClick);
+byId("review-summary").addEventListener("click", handleMarkClick);
 
 function renderConflictSide(question) {
   const heading = `${question.type === "tossup" ? "Tossup" : "Bonus"} ${question.number}`;
@@ -754,7 +913,14 @@ function renderAudit(result) {
           <span class="label-status small muted-text" aria-live="polite">${item.saved_label ? "Saved" : ""}</span>
         </div></div>`).join("")}</div>`
     : `<p>No candidate conflicts were found in the current layout.</p>`;
-  host.innerHTML = `${hardErrors}${distribution}
+  state.locations = questionLocations();
+  const openMarks = (result.marks || []).filter((mark) => mark.status === "open");
+  const markCard = openMarks.length
+    ? `<article class="card audit-card"><h3>Your marked conflicts (${openMarks.length})</h3>
+      <ul class="mark-audit-list">${openMarks.map((mark) => `<li>${escapeHtml(locationLabel(mark.question_id))}${mark.other_id ? ` ↔ ${escapeHtml(locationLabel(mark.other_id))}` : ""}${mark.note ? ` — ${escapeHtml(mark.note)}` : ""}</li>`).join("")}</ul>
+      <p class="small muted-text">Marks are saved in <code>calibration/review_marks.jsonl</code> and edited on the Review page.</p></article>`
+    : "";
+  host.innerHTML = `${hardErrors}${markCard}${distribution}
     <article class="card audit-card"><h3>Likely conflicts to review</h3>
       <p>Top pairwise similarity candidates and adjacent same-category tossups. These are review signals, not automatic errors. Your judgments are saved to <code>calibration/labels.jsonl</code> (IDs and hashes only, no question text) to calibrate similarity scorers over time.</p>
       ${conflicts}

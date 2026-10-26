@@ -100,6 +100,22 @@ between packets, and reorder them. Recalculation updates numbering, hard-rule
 validation, leftovers, and the selected draft's soft score. Revalidate edits
 before exporting.
 
+Use the ⚑ button on a question to mark it as a possible conflict. A mark can
+optionally link a second question and carry a short note (up to 500
+characters). Marked questions show a badge, the packet picker shows how many
+marked questions each packet holds, and a list at the top of Review jumps to
+each one; marks can be edited, resolved, reopened, or removed. Marks follow
+the question when you move or reorder it, and are listed in Audit. They are
+editorial notes only: they do not change scores or hard-rule validation. When
+linking a second question, the picker lists each candidate by packet, TU
+(tossup) or B (bonus) number, category, and a short preview of its answer line.
+For a linked pair you can also tick "Also record the pair as Too similar" to save a
+pair label (source `review-mark`) that re-runs will use.
+
+Marks are saved in `calibration/review_marks.jsonl`: IDs, notes, and
+timestamps only, no question text. The file is append-only and tracked in the
+repository, so review its changes before sharing or committing them.
+
 In **Audit**, check the build summary, remaining questions, adjacent tossups and bonuses,
 and likely-similar within-packet pairs. Free-form audit requests currently
 recognize pool categories and some century references. Audit is under

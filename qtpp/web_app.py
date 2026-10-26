@@ -79,6 +79,10 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                 result = self.workspace.select_run(payload.get("run_index"))
             elif route == "/api/label":
                 result = self.workspace.label_pair(payload)
+            elif route == "/api/marks":
+                result = self.workspace.list_marks()
+            elif route == "/api/mark":
+                result = self.workspace.save_mark(payload)
             elif route == "/api/export":
                 result = self.workspace.export(payload)
             else:
