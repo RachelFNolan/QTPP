@@ -250,6 +250,12 @@ app's Audit view can also append judgments to `calibration/labels.jsonl`;
 against those labels. The label cache contains IDs and normalized-text hashes,
 not question text.
 
+`python3 -m calibration.tagger_corpus [DIRECTORY]` (experimental) audits CSV and
+JSON pools in the gitignored `tagger_data/` folder for local tagger evaluation.
+It maps fields automatically and prints only counts: questions per source,
+duplicates across sources, and alternate-subcategory coverage. It does not
+write question text anywhere.
+
 Reviewer marks from the Review page are stored separately in
 `calibration/review_marks.jsonl` (`qtpp/review_marks.py`), one JSON object per
 line: `mark_id`, `question_id`, optional `other_id`, `note` (up to 500
