@@ -227,10 +227,12 @@ def inspect_json(text: str, filename: str = "question-pool.json") -> dict[str, A
     columns: list[str] = []
     seen: set[str] = set()
     flat_rows: list[dict[str, Any]] = []
-    for _, row in rows:
+    scanned: dict[str, int] = {}
+    for kind, row in rows:
         flat = _flatten(row)
         flat_rows.append(flat)
-        if len(flat_rows) <= MAX_COLUMN_SCAN_ROWS:
+        scanned[kind] = scanned.get(kind, 0) + 1
+        if scanned[kind] <= MAX_COLUMN_SCAN_ROWS:
             for path in flat:
                 if path not in seen:
                     seen.add(path)
@@ -505,8 +507,11 @@ def mapped_pool_json(text: str, mapping: Any, filename: str = "question-pool.jso
     rows, top_set = _json_rows(text, filename)
     mapping = _clean_mapping(mapping)
     columns: set[str] = set()
-    for _, row in rows[:MAX_COLUMN_SCAN_ROWS]:
-        columns.update(_flatten(row))
+    scanned: dict[str, int] = {}
+    for kind, row in rows:
+        scanned[kind] = scanned.get(kind, 0) + 1
+        if scanned[kind] <= MAX_COLUMN_SCAN_ROWS:
+            columns.update(_flatten(row))
     _validate_mapping(mapping, columns, filename)
 
     default_set = Path(filename).stem or "question-pool"

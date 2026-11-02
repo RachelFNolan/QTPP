@@ -26,3 +26,4 @@ Test Questions/*/
 
 # Local tagger evaluation data (question text; never commit)
 tagger_data/
+tagger_data/*/

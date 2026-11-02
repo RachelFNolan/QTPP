@@ -132,6 +132,14 @@ class JsonMappingTests(unittest.TestCase):
         self.assertEqual(pool.bonuses[0].metadata.author, "Packet Two")
         self.assertEqual(len(pool.bonuses[0].parts), 2)
 
+    def test_bonus_columns_found_after_many_tossups(self) -> None:
+        data = json.loads(json.dumps(self.DATA))
+        data["tossups"] = [dict(data["tossups"][0], _id=f"t{index}") for index in range(600)]
+        result = inspect_json(json.dumps(data), "pool.json")
+        self.assertEqual(result["suggestion"]["mapping"]["bonus_leadin"], "intro")
+        text = mapped_pool_json(json.dumps(data), self.MAPPING, "pool.json")
+        self.assertEqual(len(parse_question_pool_json(text, "pool.json").bonuses), 1)
+
     def test_mismatched_part_and_answer_counts_fail(self) -> None:
         data = json.loads(json.dumps(self.DATA))
         data["bonuses"][0]["answers"] = ["only one"]

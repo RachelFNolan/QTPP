@@ -256,6 +256,21 @@ It maps fields automatically and prints only counts: questions per source,
 duplicates across sources, and alternate-subcategory coverage. It does not
 write question text anywhere.
 
+`python3 -m calibration.tagger_dataset` (experimental) prints the date split for
+alternate-subcategory tagging: questions from sets through 2024 are the development
+data, and questions from 2025 on are held out for formal validation. Each
+question's year comes from its set metadata (or the file name). `python3 -m
+calibration.evaluate_tagger [--tagger tfidf|embeddings|concat|blend] [--model NAME]
+[--cap N] [--validate]` runs 5-fold cross-validation on the development data per slice
+and prints per-label precision, recall, a confusion matrix, and coverage versus
+accuracy by confidence threshold. `--validate` scores the held-out 2025+ data instead;
+use it sparingly. `concat` (TF-IDF plus `all-MiniLM-L6-v2` embeddings) is the
+current choice; `--model` swaps the embedding model for comparisons (`bge-small` and
+`bge-base` gained about one point at several times the cost). `python3 -m
+calibration.check_leakage` reports near-duplicates between development and validation
+data. These scripts print metrics only and require scikit-learn; embedding taggers
+also need sentence-transformers.
+
 Reviewer marks from the Review page are stored separately in
 `calibration/review_marks.jsonl` (`qtpp/review_marks.py`), one JSON object per
 line: `mark_id`, `question_id`, optional `other_id`, `note` (up to 500
