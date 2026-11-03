@@ -14,7 +14,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-DEFAULT_MARKS = Path(__file__).resolve().parents[1] / "calibration" / "review_marks.jsonl"
 STATUSES = ("open", "resolved", "removed")
 MAX_NOTE = 500
 

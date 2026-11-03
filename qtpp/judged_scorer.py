@@ -25,10 +25,6 @@ class Judgments:
     different: frozenset[tuple[str, str]] = frozenset()
     borderline: int = 0
 
-    @property
-    def applied(self) -> int:
-        return len(self.similar) + len(self.different)
-
     def flagged_together(self, packets: list[set[str]]) -> int:
         """Count 'similar' pairs that share a packet."""
         return sum(

@@ -38,7 +38,7 @@ class SolverTests(unittest.TestCase):
     def test_separation_window_is_enforced_and_reported(self) -> None:
         from dataclasses import replace
         from qtpp.build_spec import TossupBonusSeparation
-        from qtpp.solving import PoolIndex, separation_conflicts, validate_layouts
+        from qtpp.solving import PoolIndex, separation_conflicts
 
         index = PoolIndex.from_pool(self.pool)
         for sep in (

@@ -6,7 +6,6 @@ from pathlib import Path
 from qtpp import (
     AllowedCountPatterns,
     BuildTemplate,
-    CategoryCountRule,
     CountSelector,
     load_template,
     save_template,

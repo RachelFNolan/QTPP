@@ -44,7 +44,6 @@ from .similarity import SimilarityWeights, build_similarity, question_text
 from .solving import InfeasibleError, PoolIndex, validate_layouts
 from .template_json import load_template, template_from_dict, template_to_dict
 from .time_place import detect_century
-from .templates import BuildTemplate
 
 
 DEFAULT_TEMPLATES = Path(__file__).resolve().parent.parent / "templates"
@@ -121,7 +120,6 @@ class Workspace:
         self.demo_csv = Path(demo_csv)
         self._lock = threading.RLock()
         self._pool: QuestionSet | None = None
-        self._template: BuildTemplate | None = None
         self._runs: list[_Run] = []
         self._baseline: dict[str, dict[str, float]] = {}
         self._last_request: dict[str, Any] | None = None
@@ -248,7 +246,6 @@ class Workspace:
     def _set_pool(self, pool: QuestionSet) -> dict[str, Any]:
         with self._lock:
             self._pool = pool
-            self._template = None
             self._runs = []
             self._baseline = {}
             self._last_request = None
@@ -524,7 +521,6 @@ class Workspace:
             "similar": len(judgments.similar),
             "different": len(judgments.different),
         }
-        self._template = template
         self._runs = runs
         self._selected_run = 0
         self._draft = runs[0].generated.question_set

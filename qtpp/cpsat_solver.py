@@ -7,7 +7,6 @@ from typing import Iterable
 
 from .build_spec import (
     AllowedCountPatterns,
-    CategoryGroupCountRule,
     CategoryCountRule,
     LeftoverBound,
     PacketBuildSpec,

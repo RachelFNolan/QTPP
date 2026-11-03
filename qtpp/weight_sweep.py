@@ -154,7 +154,6 @@ COARSE_FACTORS = (0.5, 1.0, 2.0)
 REFINE_FACTORS = (0.7, 1.4)
 MAX_BUILDS = 400
 MAX_TIME_LIMIT = 600.0
-EPSILON = 1e-9
 
 
 def _vector(weights: SoftWeights) -> tuple[float, float, float]:

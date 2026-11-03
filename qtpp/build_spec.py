@@ -5,7 +5,6 @@ from typing import Literal, Mapping, Sequence
 
 
 QuestionType = Literal["tossup", "bonus"]
-RuleScope = Literal["packet", "set"]
 QUESTION_TYPES: tuple[QuestionType, ...] = ("tossup", "bonus")
 
 
