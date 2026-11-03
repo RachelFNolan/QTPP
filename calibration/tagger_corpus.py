@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import re
 import sys
 import tempfile
@@ -49,7 +50,32 @@ def load_source(path: Path) -> QuestionSet:
         finally:
             temporary_path.unlink(missing_ok=True)
     mapping = inspect_json(text, path.name)["suggestion"]["mapping"]
-    return parse_question_pool_json(mapped_pool_json(text, mapping, path.name), path.name)
+    try:
+        return parse_question_pool_json(mapped_pool_json(text, mapping, path.name), path.name)
+    except ValueError as error:
+        if "lead-in is empty" not in str(error):
+            raise
+    return parse_question_pool_json(
+        mapped_pool_json(_without_empty_leadins(text), mapping, path.name), path.name
+    )
+
+
+def _without_empty_leadins(text: str) -> str:
+    """Drop bonuses with no lead-in, which the importer rejects, so one row can't block a file."""
+    data = json.loads(text)
+    rows = data if isinstance(data, list) else None
+    if rows is None:
+        for key in ("tossups", "bonuses"):
+            if isinstance(data.get(key), list):
+                data[key] = [r for r in data[key] if not _bare_bonus(r)]
+        if isinstance(data.get("questions"), list):
+            data["questions"] = [r for r in data["questions"] if not _bare_bonus(r)]
+        return json.dumps(data)
+    return json.dumps([r for r in rows if not _bare_bonus(r)])
+
+
+def _bare_bonus(row) -> bool:
+    return isinstance(row, dict) and "parts" in row and not str(row.get("leadin") or "").strip()
 
 
 def _questions(pool: QuestionSet):

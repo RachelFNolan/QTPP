@@ -271,6 +271,15 @@ calibration.check_leakage` reports near-duplicates between development and valid
 data. These scripts print metrics only and require scikit-learn; embedding taggers
 also need sentence-transformers.
 
+`calibration/soft_tags.py` (experimental) scores era and region tags by comparing a
+question's embedding to short tag descriptions; confidences are a softmax over the
+scores, so one question can carry several tags. `python3 -m
+calibration.evaluate_time_place` prints how often the older rule-based detectors in
+`qtpp/time_place.py` produce a tag, by category. `python3 -m
+calibration.make_tag_review` writes History questions with suggested tags to
+`tagger_data/reviews/tag_review.csv` for hand review; that file contains question text
+and is gitignored. Status and decisions are in
+[planning/TAGGER.md](../planning/TAGGER.md).
 Reviewer marks from the Review page are stored separately in
 `calibration/review_marks.jsonl` (`qtpp/review_marks.py`), one JSON object per
 line: `mark_id`, `question_id`, optional `other_id`, `note` (up to 500

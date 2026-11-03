@@ -79,9 +79,15 @@ def question_years(path: Path) -> tuple[dict[str, int], int | None]:
 
 
 def load_examples(
-    directory: Path = DEFAULT_DIRECTORY, validation_year: int = VALIDATION_YEAR
+    directory: Path = DEFAULT_DIRECTORY,
+    validation_year: int = VALIDATION_YEAR,
+    labeled_only: bool = True,
 ) -> tuple[list[Example], list[Example]]:
-    """Return ``(development, validation)`` examples that carry an alternate subcategory."""
+    """Return ``(development, validation)`` examples.
+
+    By default only questions with an alternate subcategory are kept. With
+    ``labeled_only=False`` every dated question is kept and ``label`` may be empty.
+    """
     files = [p for p in directory.glob("*") if p.suffix.lower() in {".csv", ".json"}]
     file_years = {p: question_years(p) for p in files}
 
@@ -105,7 +111,7 @@ def load_examples(
             seen.add(fingerprint)
             topic = question.metadata.topic
             label = (topic.alternate_subcategory or "").strip()
-            if not label:
+            if not label and labeled_only:
                 continue
             example = Example(
                 question_id=question.metadata.id,
@@ -119,7 +125,7 @@ def load_examples(
                 slice=slice_name(topic.category, topic.subcategory),
             )
             (test if year >= validation_year else train).append(example)
-    return _drop_tiny_slices(train, test)
+    return _drop_tiny_slices(train, test) if labeled_only else (train, test)
 
 
 def _drop_tiny_slices(

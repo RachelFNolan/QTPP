@@ -40,6 +40,7 @@ Working notes on what to build next and what might be worth cutting. Items are j
 - **Label hygiene tools:** detect conflicting labels for one pair, show label history, support more than one reviewer, and merge or dedupe caches from several people.
 - **Mark which labels have never been checked against the current pool**, so reviewers know which ones affect a re-run.
 - **An optional AI-backed audit investigator** behind the existing audit boundary. Keep it opt-in, since v1 sends no question data off the machine.
+- **Local tagger for alternate subcategories, eras, regions and themes** (experimental). Suggestions with confidence from a local embedding model, never sent off the machine. See [TAGGER.md](TAGGER.md) for status and decisions.
 
 ### Quality and operations
 
