@@ -29,5 +29,5 @@ tagger_data/
 tagger_data/*/
 
 # Local question packets and review notes (question text; never commit)
-"Test Questions/"
+Test Questions/
 calibration/review_marks.jsonl
