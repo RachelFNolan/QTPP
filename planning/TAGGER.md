@@ -13,7 +13,7 @@ commitments.
   Stronger embedding models (bge-small, bge-base) gained about one point at
   several times the cost, so they were not adopted. The formal 2025+ validation
   has not been run for this choice.
-- Era and region: experimental soft tagger (`calibration/soft_tags.py`) compares
+- Era and region: experimental soft tagger (`calibration/soft_tags_updated.py`) compares
   question text to short tag descriptions. No keyword rules.
 - Theme tags: not started.
 
@@ -27,8 +27,8 @@ commitments.
   by part.
 - Eras are 7 (Ancient; Medieval; Early modern; Revolutionary and industrial age;
   Imperial age and World War I; Interwar and World War II; Postwar to present).
-  Regions are 31 for now; merges (for example Britain and Ireland) are to be
-  decided through review and approval.
+  Regions are 22, as in `calibration/soft_tags_updated.py`. Further merges (for example
+  Britain and Ireland, already combined as British Isles) need review and approval.
 - A "multiple eras/regions" flag will not be derived from tag-confidence
   spread. Tested on 50 reviewed History questions, that flag had about 40%
   precision. It should come from a human judgment or a learned signal.

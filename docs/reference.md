@@ -271,7 +271,7 @@ calibration.check_leakage` reports near-duplicates between development and valid
 data. These scripts print metrics only and require scikit-learn; embedding taggers
 also need sentence-transformers.
 
-`calibration/soft_tags.py` (experimental) scores era and region tags by comparing a
+`calibration/soft_tags_updated.py` (experimental) scores era and region tags by comparing a
 question's embedding to short tag descriptions; confidences are a softmax over the
 scores, so one question can carry several tags. `python3 -m
 calibration.evaluate_time_place` prints how often the older rule-based detectors in
