@@ -27,3 +27,7 @@ Test Questions/*/
 # Local tagger evaluation data (question text; never commit)
 tagger_data/
 tagger_data/*/
+
+# Local question packets and review notes (question text; never commit)
+"Test Questions/"
+calibration/review_marks.jsonl
