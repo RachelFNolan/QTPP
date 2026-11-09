@@ -1,10 +1,11 @@
 """Labeled dataset and date-based split for local tagger evaluation (experimental).
 
 Builds alternate-subcategory examples from the gitignored ``tagger_data/``
-folder. Questions from sets through 2024 are development data (training and
+folder and its subfolders (``reviews/`` is skipped). Questions from sets through 2024 are development data (training and
 cross-validation); questions from 2025 onward are held out for formal
-validation. Each question's year comes from its raw record (``set.year``) or,
-for CSV files, from a ``set_year`` column or a year in the file name. Questions
+validation. Each question's year comes from its raw record (``set.year``, a
+top-level ``year``, or the set name), or for CSV files, from a ``set_year`` column
+or a year in the file name. Question IDs come from ``_id`` or ``id``. Questions
 without a year are skipped. Duplicates are removed, and validation files are read
 first so a question present in both is kept only in validation. The CLI prints
 counts only.
@@ -67,13 +68,21 @@ def question_years(path: Path) -> tuple[dict[str, int], int | None]:
         return years, fallback
     data = json.loads(path.read_text(encoding="utf-8-sig"))
     rows = data if isinstance(data, list) else [*data.get("tossups", []), *data.get("bonuses", [])]
-    years = {
-        str(row["_id"]): year
-        for row in rows
-        if isinstance(row, dict)
-        and "_id" in row
-        and (year := _as_year((row.get("set") or {}).get("year")))
-    }
+    years = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        question_id = row.get("_id", row.get("id"))
+        if question_id is None:
+            continue
+        set_info = row.get("set")
+        year = (
+            _as_year(set_info.get("year") if isinstance(set_info, dict) else None)
+            or _as_year(row.get("year"))
+            or _as_year(set_info)
+        )
+        if year:
+            years[str(question_id)] = year
     top = data.get("set") if isinstance(data, dict) else None
     return years, _as_year((top or {}).get("year")) or fallback
 
@@ -88,7 +97,13 @@ def load_examples(
     By default only questions with an alternate subcategory are kept. With
     ``labeled_only=False`` every dated question is kept and ``label`` may be empty.
     """
-    files = [p for p in directory.glob("*") if p.suffix.lower() in {".csv", ".json"}]
+    files = [
+        p
+        for p in directory.rglob("*")
+        if p.is_file()
+        and p.suffix.lower() in {".csv", ".json"}
+        and "reviews" not in p.relative_to(directory).parts
+    ]
     file_years = {p: question_years(p) for p in files}
 
     def newest(path: Path) -> int:

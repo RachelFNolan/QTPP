@@ -258,8 +258,9 @@ write question text anywhere.
 
 `python3 -m calibration.tagger_dataset` (experimental) prints the date split for
 alternate-subcategory tagging: questions from sets through 2024 are the development
-data, and questions from 2025 on are held out for formal validation. Each
-question's year comes from its set metadata (or the file name). `python3 -m
+data, and questions from 2025 on are held out for formal validation. The loader reads
+files in `tagger_data/` and its subfolders, except `reviews/`. Each question's year
+comes from its set metadata, a top-level `year` field, or the file name. `python3 -m
 calibration.evaluate_tagger [--tagger tfidf|embeddings|concat|blend] [--model NAME]
 [--cap N] [--validate]` runs 5-fold cross-validation on the development data per slice
 and prints per-label precision, recall, a confusion matrix, and coverage versus
@@ -278,8 +279,12 @@ calibration.evaluate_time_place` prints how often the older rule-based detectors
 `qtpp/time_place.py` produce a tag, by category. `python3 -m
 calibration.make_tag_review` writes History questions with suggested tags to
 `tagger_data/reviews/tag_review.csv` for hand review; that file contains question text
-and is gitignored. Status and decisions are in
-[planning/TAGGER.md](../planning/TAGGER.md).
+and is gitignored. Add `--source validation` to draw from the 2025+ pool instead.
+`python3 -m calibration.tune_soft_tags [--source dev|validation] [--fixed]` scores the
+hand-reviewed verdicts in `tagger_data/reviews/tag_review.md` against the current era
+and region vocabulary and prints counts and metrics only. Without `--fixed` it also
+sweeps temperatures; with it, only the current defaults are scored. Status and
+decisions are in [planning/TAGGER.md](../planning/TAGGER.md).
 Reviewer marks from the Review page are stored separately in
 `calibration/review_marks.jsonl` (`qtpp/review_marks.py`), one JSON object per
 line: `mark_id`, `question_id`, optional `other_id`, `note` (up to 500
