@@ -39,11 +39,13 @@ def spread_sample(indexes: list[int], strength: np.ndarray, count: int) -> list[
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--per-subcategory", type=int, default=10)
+    parser.add_argument("--source", choices=("dev", "validation"), default="dev")
     parser.add_argument("--output", type=Path, default=DEFAULT_DIRECTORY / "reviews" / "tag_review.csv")
     args = parser.parse_args()
 
-    dev, _ = load_examples(labeled_only=False)
-    history = [e for e in dev if e.category == "History"]
+    dev, validation = load_examples(labeled_only=False)
+    pool = validation if args.source == "validation" else dev
+    history = [e for e in pool if e.category == "History"]
     texts = [e.text for e in history]
     era_tagger = SoftTagger(ERAS, ERA_TEMPERATURE)
     region_tagger = SoftTagger(REGIONS, REGION_TEMPERATURE)

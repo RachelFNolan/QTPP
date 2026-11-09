@@ -51,7 +51,7 @@ REGIONS: dict[str, str] = {
 
 # Fitted on weak labels (History subcategory as a rough answer) in development data.
 ERA_TEMPERATURE = 0.03
-REGION_TEMPERATURE = 0.05
+REGION_TEMPERATURE = 0.02
 
 
 @dataclass(frozen=True, slots=True)

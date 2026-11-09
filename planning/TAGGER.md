@@ -14,7 +14,9 @@ commitments.
   several times the cost, so they were not adopted. The formal 2025+ validation
   has not been run for this choice.
 - Era and region: experimental soft tagger (`calibration/soft_tags_updated.py`) compares
-  question text to short tag descriptions. No keyword rules.
+  question text to short tag descriptions. No keyword rules. Default threshold
+  0.25, with era temperature 0.03 and region temperature 0.02. Held-out check
+  on 100 validation questions done (see below).
 - Theme tags: not started.
 
 ## Decisions
@@ -43,6 +45,20 @@ commitments.
   of the correct eras (recall is the limit).
 - These numbers were tuned on the same 50 questions, so they are optimistic.
 
+## Held-out check on 100 validation History questions
+
+- Sample: 20 questions per History subcategory, drawn from the 2025-and-later
+  pool (`tagger_data/collegiate_2025_plus` and the other validation files). Not
+  used for tuning. Settings were fixed before scoring.
+- Scored with `python3 -m calibration.tune_soft_tags --source validation --fixed`
+  at the current temperatures. No sweep was run on this sample.
+- Era (123 judged positives): threshold 0.20 gave 72% precision and 76% recall;
+  0.25 gave 74% and 72%; 0.30 gave 77% and 70%; 0.50 gave 85% and 54%.
+- Region (128 judged positives): 0.20 gave 76% and 70%; 0.25 gave 78% and 67%;
+  0.30 gave 82% and 66%; 0.50 gave 87% and 60%.
+- Decision: keep the default threshold at 0.25, given the recall emphasis.
+- Caveats: the sample is small. Some tags were judged only through `missing` lines.
+
 ## Idea under consideration: entity lookup
 
 Extract entities (people, places, events) and look up when and where they are
@@ -69,5 +85,7 @@ Generic answers are also the likeliest targets for later theme tagging.
    the reviewed History questions.
 2. Region merge proposal, reviewed and approved by the project owner.
 3. A larger review sample, and a held-out test set that tuning has not seen.
+   The first held-out check is done (100 questions); enlarge it before choosing
+   any setting from it.
 4. Integration into the app: stored suggestions with source and confidence, a
    review UI, optional dependencies, docs and tests.
