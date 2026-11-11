@@ -29,8 +29,8 @@ commitments.
   by part.
 - Eras are 7 (Ancient; Medieval; Early modern; Revolutionary and industrial age;
   Imperial age and World War I; Interwar and World War II; Postwar to present).
-  Regions are 22, as in `calibration/soft_tags_updated.py`. Further merges (for example
-  Britain and Ireland, already combined as British Isles) need review and approval.
+  Regions are 22, as in `calibration/soft_tags_updated.py`. The vocabulary is approved.
+  Any later merge needs review and approval.
 - A "multiple eras/regions" flag will not be derived from tag-confidence
   spread. Tested on 50 reviewed History questions, that flag had about 40%
   precision. It should come from a human judgment or a learned signal.
@@ -83,7 +83,8 @@ Generic answers are also the likeliest targets for later theme tagging.
 
 1. Entity experiment on answer lines using only corpus statistics, scored on
    the reviewed History questions.
-2. Region merge proposal, reviewed and approved by the project owner.
+2. Era and region vocabulary (7 eras, 22 regions) approved by the project owner.
+   "Late Cold War" stays merged into "Postwar to present".
 3. A larger review sample, and a held-out test set that tuning has not seen.
    The first held-out check is done (100 questions); enlarge it before choosing
    any setting from it.

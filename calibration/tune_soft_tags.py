@@ -97,6 +97,8 @@ def parse_review(path: Path) -> tuple[dict, dict[str, int]]:
             if value not in ("y", "n"):
                 skipped["unknown_verdict"] += 1
                 continue
+            if old == "(none suggested)":
+                continue
             mapping = name_mapping(kind)
             if old not in mapping:
                 skipped["unmapped"] += 1
