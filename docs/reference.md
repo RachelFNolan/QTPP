@@ -264,7 +264,8 @@ comes from its set metadata, a top-level `year` field, or the file name. `python
 calibration.evaluate_tagger [--tagger tfidf|embeddings|concat|blend] [--model NAME]
 [--cap N] [--validate]` runs 5-fold cross-validation on the development data per slice
 and prints per-label precision, recall, a confusion matrix, and coverage versus
-accuracy by confidence threshold. `--validate` scores the held-out 2025+ data instead;
+accuracy by confidence threshold. Literature, Social Science, and Pop Culture are each
+one slice; Pop Culture subcategories are not split for now. `--validate` scores the held-out 2025+ data instead;
 use it sparingly. `concat` (TF-IDF plus `all-MiniLM-L6-v2` embeddings) is the
 current choice; `--model` swaps the embedding model for comparisons (`bge-small` and
 `bge-base` gained about one point at several times the cost). `python3 -m

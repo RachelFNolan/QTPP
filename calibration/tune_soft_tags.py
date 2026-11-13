@@ -72,11 +72,32 @@ VERDICT = re.compile(r"^- (era|region): (.+?)(?: \([\d.]+\))?\s+verdict:\s*(\S*)
 MISSING = re.compile(r"^- missing (era|region):\s*(.*)$")
 
 
+REVIEW_ALIASES = {
+    "era": {
+        "Early Modern": "Early modern",
+        "Imperial Age and World War I": "Imperial age and World War I",
+        "Imperial Era and World War I": "Imperial age and World War I",
+        "Imperialism and World War 1": "Imperial age and World War I",
+        "Imperialism Era and World War I": "Imperial age and World War I",
+        "Interwar Era and World War II": "Interwar and World War II",
+        "Revolutionary and Industrial Era": "Revolutionary and industrial age",
+        "Revolutionary and Industrial Eras": "Revolutionary and industrial age",
+        "Revolutionary Era and Industrial Age": "Revolutionary and industrial age",
+        "Postward and Present": "Postwar to present",
+    },
+    "region": {
+        "Southwestern Asia": "Southwest Asia",
+        "Indian and South Asia": "India and South Asia",
+        "Unisted States": "United States",
+    },
+}
+
+
 def name_mapping(kind: str) -> dict[str, str | None]:
-    """Review names -> current tags: old names from the first review plus current names as-is."""
+    """Review names -> current tags: old names from the first review, reviewer spelling variants, current names."""
     old = OLD_ERAS if kind == "era" else OLD_REGIONS
     vocabulary = ERAS if kind == "era" else REGIONS
-    return {**{tag: tag for tag in vocabulary}, **old}
+    return {**{tag: tag for tag in vocabulary}, **REVIEW_ALIASES[kind], **old}
 
 
 def parse_review(path: Path) -> tuple[dict, dict[str, int]]:
@@ -127,27 +148,37 @@ def parse_review(path: Path) -> tuple[dict, dict[str, int]]:
     return labels, skipped
 
 
+def tally(confidences: np.ndarray, tags: list[str], judged: list[dict[str, bool]], threshold: float) -> dict[str, int]:
+    """Count predicted tags at ``threshold`` against judged labels. Unjudged tags are not scored."""
+    counts = {"predicted": 0, "correct": 0, "found": 0, "unjudged": 0, "positives": 0}
+    counts["positives"] = sum(1 for row in judged for value in row.values() if value)
+    for row, labels in zip(confidences, judged):
+        for index, value in enumerate(row):
+            if value < threshold:
+                continue
+            tag = tags[index]
+            if tag not in labels:
+                counts["unjudged"] += 1
+                continue
+            counts["predicted"] += 1
+            counts["correct"] += labels[tag]
+            counts["found"] += labels[tag]
+    return counts
+
+
 def evaluate(tagger: SoftTagger, texts: list[str], judged: list[dict[str, bool]], thresholds) -> None:
     confidences = tagger.confidences(texts)
     total_positive = sum(1 for row in judged for value in row.values() if value)
     print(f"  temperature {tagger.temperature}: judged positives {total_positive}")
     print(f"  {'threshold':>9}{'predicted':>10}{'correct':>9}{'precision':>11}{'recall':>9}{'unjudged':>10}")
     for threshold in thresholds:
-        predicted = correct = unjudged = found = 0
-        for row, labels in zip(confidences, judged):
-            for index, value in enumerate(row):
-                if value < threshold:
-                    continue
-                tag = tagger.tags[index]
-                if tag not in labels:
-                    unjudged += 1
-                    continue
-                predicted += 1
-                correct += labels[tag]
-                found += labels[tag]
-        precision = correct / predicted if predicted else float("nan")
-        recall = found / total_positive if total_positive else float("nan")
-        print(f"  {threshold:>9.2f}{predicted:>10}{correct:>9}{precision:>11.0%}{recall:>9.0%}{unjudged:>10}")
+        counts = tally(confidences, tagger.tags, judged, threshold)
+        precision = counts["correct"] / counts["predicted"] if counts["predicted"] else float("nan")
+        recall = counts["found"] / total_positive if total_positive else float("nan")
+        print(
+            f"  {threshold:>9.2f}{counts['predicted']:>10}{counts['correct']:>9}"
+            f"{precision:>11.0%}{recall:>9.0%}{counts['unjudged']:>10}"
+        )
     print()
 
 

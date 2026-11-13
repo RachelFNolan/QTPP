@@ -25,11 +25,11 @@ from pathlib import Path
 
 from calibration.tagger_corpus import DEFAULT_DIRECTORY, _fingerprint, _questions, load_source
 from qtpp.model import Tossup
-from qtpp.similarity import question_text
+from qtpp.similarity import primary_answer, question_text
 
 VALIDATION_YEAR = 2025
 # Categories whose alternate labels span several subcategories are evaluated as one slice.
-POOLED_CATEGORIES = ("Literature", "Social Science")
+POOLED_CATEGORIES = ("Literature", "Social Science", "Pop Culture")
 MIN_LABEL_EXAMPLES = 2
 
 
@@ -44,6 +44,8 @@ class Example:
     year: int
     kind: str
     slice: str
+    leadin: str = ""
+    answers: tuple[str, ...] = ()
 
 
 def slice_name(category: str, subcategory: str) -> str:
@@ -85,6 +87,18 @@ def question_years(path: Path) -> tuple[dict[str, int], int | None]:
             years[str(question_id)] = year
     top = data.get("set") if isinstance(data, dict) else None
     return years, _as_year((top or {}).get("year")) or fallback
+
+
+def _leadin(question) -> str:
+    if isinstance(question, Tossup):
+        return ""
+    return question.leadin_sanitized or question.leadin
+
+
+def _answers(question) -> tuple[str, ...]:
+    if isinstance(question, Tossup):
+        return (primary_answer(question.answer_sanitized or question.answer),)
+    return tuple(primary_answer(part.answer_sanitized or part.answer) for part in question.parts)
 
 
 def load_examples(
@@ -138,6 +152,8 @@ def load_examples(
                 year=year,
                 kind="tossup" if isinstance(question, Tossup) else "bonus",
                 slice=slice_name(topic.category, topic.subcategory),
+                leadin=_leadin(question),
+                answers=_answers(question),
             )
             (test if year >= validation_year else train).append(example)
     return _drop_tiny_slices(train, test) if labeled_only else (train, test)
